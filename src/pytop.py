@@ -1,6 +1,7 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 """ pytop.py: Htop copycat implemented in Python. """
+import datetime
 
 __author__ = 'Andrii Oshtuk'
 __copyright__ = '(C) 2019 ' + __author__
@@ -17,4 +18,5 @@ def parse_args():
 
     return argparser.parse_args()
 
-options = parse_args()
+if __name__ == "__main__":
+    options = parse_args()
