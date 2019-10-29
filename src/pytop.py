@@ -9,6 +9,71 @@ __license__ = "MIT"
 __version__ = '0.0.1 Alpha 1'
 
 import argparse
+from collections import namedtuple
+
+
+class Cpu:
+    """
+    Calculates CPU usage based on /proc/stat file data
+
+    Class retrieves CPU statistics from /proc/stat file and provides public
+    methods for easy access to CPU usage.
+
+    Attributes:
+        update(): Retrieves fresh CPU statistics.
+        get_cpu_usage(): Returns list of CPU usage for each CPU measured
+            between last two update() calls.
+    """
+
+    CpuStat = namedtuple('CpuStat',
+                         ['name', 'user', 'nice', 'system', 'idle', 'iowait', 'irq', 'softirq', 'steal', 'guest',
+                          'guest_nice', ])
+
+    def __init__(self):
+        self.prev_stat = self._read_file()
+        self.current_stat = self.prev_stat
+
+    def update(self):
+        """ Retrieves fresh CPU statistics and stores previous statistics. """
+        self.prev_stat = self.current_stat
+        self.current_stat = self._read_file()
+
+    def get_cpu_usage(self):
+        """ Returns list of CPU usage for each CPU measured between last
+        two update() calls.
+        """
+        cpu_usage = []
+
+        for (prev, new) in zip(self.prev_stat, self.current_stat):
+            idle_prev = prev.idle + prev.iowait
+            idle_new = new.idle + new.iowait
+
+            non_idle_prev = prev.user + prev.nice + prev.system + prev.irq + prev.softirq + prev.steal
+            non_idle_new = new.user + new.nice + new.system + new.irq + new.softirq + new.steal
+
+            total_prev = idle_prev + non_idle_prev
+            total_new = idle_new + non_idle_new
+
+            total_diff = total_new - total_prev
+            idle_diff = idle_new - idle_prev
+
+            cpu_usage_pct = (total_diff - idle_diff) * 100 / total_diff
+            cpu_usage.append(cpu_usage_pct)
+
+        return cpu_usage
+
+    def _read_file(self) -> list:
+        lst = []
+        with open('/proc/stat') as file:
+            for line in file:
+                if line.startswith('cpu '):
+                    continue
+                elif line.startswith('cpu'):
+                    temp = Cpu.CpuStat(*line)
+                    lst.append(temp)
+
+        return lst
+
 
 def parse_args():
     """ Returns script options parsed from CLI arguments."""
@@ -18,72 +83,5 @@ def parse_args():
 
     return argparser.parse_args()
 
-class CPU:
-    def __init__(self, name, user = 0, nice = 0, system = 0, idle = 0, iowait = 0, irq = 0, softirq = 0, steal = 0, guest = 0, guest_nice = 0):
-        self.name = name
-        self.update(user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice)
-
-    def update(self, user, nice, system, idle, iowait, irq, softirq, steal, guest, guest_nice):
-        self.user = user
-        self.nice = nice
-        self.system = system
-        self.idle = idle
-        self.iowait = iowait
-        self.irq = irq
-        self.softirq = softirq
-        self.steal = steal
-        self.guest = guest
-        self.guest_nice = guest_nice
-
-    def __repr__(self):
-        return f'CPU: name=\'{self.name}\', ' \
-               f'user={self.user}, ' \
-               f'nice={self.nice}, ' \
-               f'system={self.system}, ' \
-               f'idle={self.idle}, ' \
-               f'iowait={self.iowait}, ' \
-               f'irq={self.irq}, ' \
-               f'softirq={self.softirq}, ' \
-               f'steal={self.steal}, ' \
-               f'guest={ self.guest}, ' \
-               f'guest_nice{self.guest_nice}'
-
-
-class CPU_statistics:
-    def __init__(self):
-        self.cpu_list = []
-
-        with open('/proc/stat') as f:
-            for line in f:
-                if line.startswith('cpu '): continue
-                if line.startswith('cpu'):
-                    cpu = CPU(line.split()[0])
-                    self.cpu_list.append(cpu)
-
-        self.update()
-
-
-    def update(self):
-        with open('/proc/stat') as f:
-            for i, line in enumerate(f, start = -1):
-                if line.startswith('cpu '): continue
-                if line.startswith('cpu'):
-                    values = line.split()
-                    self.cpu_list[i].update(*map(int, values[1:]))
-
-    def __repr__(self):
-        s = ''
-        for el in self.cpu_list:
-            s += el.__repr__()
-            s += '\n'
-
-        return s
-
-
-
-
 if __name__ == "__main__":
     options = parse_args()
-
-    a = CPU_statistics()
-    print(a)
