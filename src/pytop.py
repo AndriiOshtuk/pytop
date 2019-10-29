@@ -12,20 +12,36 @@ import argparse
 from collections import namedtuple
 
 
-Cpu_Statistics = namedtuple('Cpu_Statistics', ['name', 'user', 'nice', 'system', 'idle', 'iowait', 'irq', 'softirq', 'steal', 'guest', 'guest_nice'])
-
 class Cpu:
+    """
+    Calculates CPU usage based on /proc/stat file data
+
+    Class retrieves CPU statistics from /proc/stat file and provides public
+    methods for easy access to CPU usage.
+
+    Attributes:
+        update(): Retrieves fresh CPU statistics.
+        get_cpu_usage(): Returns list of CPU usage for each CPU measured
+            between last two update() calls.
+    """
+
+    CpuStat = namedtuple('CpuStat',
+                         ['name', 'user', 'nice', 'system', 'idle', 'iowait', 'irq', 'softirq', 'steal', 'guest',
+                          'guest_nice', ])
 
     def __init__(self):
         self.prev_stat = self._read_file()
         self.current_stat = self.prev_stat
 
     def update(self):
+        """ Retrieves fresh CPU statistics and stores previous statistics. """
         self.prev_stat = self.current_stat
         self.current_stat = self._read_file()
 
     def get_cpu_usage(self):
-
+        """ Returns list of CPU usage for each CPU measured between last
+        two update() calls.
+        """
         cpu_usage = []
 
         for (prev, new) in zip(self.prev_stat, self.current_stat):
@@ -53,11 +69,10 @@ class Cpu:
                 if line.startswith('cpu '):
                     continue
                 elif line.startswith('cpu'):
-                    temp = namedtuple(*line)
+                    temp = Cpu.CpuStat(*line)
                     lst.append(temp)
 
         return lst
-
 
 
 def parse_args():
@@ -67,6 +82,7 @@ def parse_args():
                            version='%(prog)s ' + __version__ + ' - ' + __copyright__)
 
     return argparser.parse_args()
+
 
 if __name__ == "__main__":
     options = parse_args()
