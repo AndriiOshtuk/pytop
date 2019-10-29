@@ -243,18 +243,6 @@ for process in processes:
 
     process_time = format(float(process_time_ticks)/clock_ticks_per_second, '.2f') #TODO(AOS) Add proper format as HH:SS.XX
 
-    # if process == '405' or process == '1':
-    #     print('total_time_ticks=', total_time_ticks)
-    #     print('start_time_ticks=', int(total_time_ticks)/clock_ticks_per_second, '[s]')
-    #     print('seconds=', seconds/60)
-
-    # if process == '5785' or process == '1':
-    #     print('process_time_ticks=', process_time_ticks)
-    #     print('process_time=', process_time)
-    # else:
-    #     continue
-
-
     final_row = ' '.join([pid_str, user_name, process_priority, process_niceness, process_vmsize, process_vm_rss_size,
                           process_rss_file_size, process_state, cpu_percent, mem_percent, process_time, cmdline[:100]])
     # print(pid_str + process_state + process_vmsize + ' ' *30 + cmdline[:100]) #TODO(AOS) Handle long cmdline later
