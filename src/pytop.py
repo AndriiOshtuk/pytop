@@ -35,7 +35,7 @@ class Cpu:
 
     Attributes:
         update(): Retrieves fresh CPU statistics.
-        cpu_usage(): List of CPUs usage for each CPU measured between last two update() calls.
+        cpu_usage: List of CPUs usage for each CPU measured between last two update() calls.
 
     .. PROC(5)
         http://man7.org/linux/man-pages/man5/proc.5.html
