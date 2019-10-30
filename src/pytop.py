@@ -10,6 +10,7 @@ __version__ = '0.0.1 Alpha 1'
 
 import argparse
 from collections import namedtuple
+from  datetime import timedelta
 import time
 
 
@@ -180,6 +181,45 @@ class MemInfo:
                 self.__mem_info[field] = Utilities.to_bytes(int(value), unit)
 
 
+class Uptime:
+    """
+        The uptime of the system
+
+        Class holds system uptime (including time spent in suspend) fetched from /proc/uptime file.
+
+        Attributes:
+            update(): Retrieves actual uptime value from /proc/uptime.
+            uptime(): Returns system uptime (including time spent in suspend) in seconds.
+            uptime_as_string(): Returns uptime as a formatted string
+
+        .. PROC(5)
+            http://man7.org/linux/man-pages/man5/proc.5.html
+        """
+    def __init__(self):
+        self.__uptime = None
+        self.update()
+
+    def update(self):
+        """Retrieves actual uptime value from /proc/uptime."""
+        self._read_file()
+
+    def _read_file(self):
+        with open('/proc/uptime', 'r') as file:
+            value = file.read().split()[0]
+            self.__uptime = int(float(value))
+
+    @property
+    def uptime(self):
+        """Returns system uptime (including time spent in suspend) in seconds."""
+        return self.__uptime
+
+    @property
+    def uptime_as_string(self):
+        """Returns uptime as a formatted string"""
+        uptime = timedelta(seconds=self.__uptime)
+        return f"{uptime}"
+
+
 def parse_args():
     """ Returns script options parsed from CLI arguments."""
     argparser = argparse.ArgumentParser(prog='pytop')
@@ -204,3 +244,6 @@ if __name__ == "__main__":
     print(f"used = {m / (1024 * 1024)} gB")
 
     print(f"\nswap:{(memory.total_swap - memory.free_swap)/ (1024 )}/{memory.total_swap/ (1024 * 1024)}gB")
+
+    up = Uptime()
+    print(f"Uptime:{up.uptime_as_string}")
