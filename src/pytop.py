@@ -260,6 +260,116 @@ class LoadAverage:
         return f"{self.__load_average[0]} {self.__load_average[1]} {self.__load_average[2]}"
 
 
+class Process:
+    def __init__(self, pid, user, priority, niceness, virtual_memory, resident_memory,
+                 shared_memory, state, cpu_usage, memory_usage, time, command):
+        self.__pid = pid
+        self.__user = user
+        self.__priority = priority
+        self.__niceness = niceness
+        self.__virtual_memory = virtual_memory
+        self.__resident_memory = resident_memory
+        self.__shared_memory = shared_memory
+        self.__state = state
+        self.__cpu_usage = cpu_usage
+        self.__memory_usage = memory_usage
+        self.__time = time
+        self.__command = command
+
+    @property
+    def pid(self):
+        return self.__pid
+
+    @property
+    def user(self):
+        return self.__user
+
+    @user.setter
+    def user(self, value):
+        self.__user = value
+
+    @property
+    def priority(self):
+        return self.__priority
+
+    @property
+    def niceness(self):
+        return self.__niceness
+
+    @niceness.setter
+    def niceness(self, value):
+        self.__niceness = value
+
+    @property
+    def virtual_memory(self):
+        return self.__virtual_memory
+
+    @virtual_memory.setter
+    def virtual_memory(self, value):
+        self.__virtual_memory = value
+
+    @property
+    def resident_memory(self):
+        return self.__resident_memory
+
+    @resident_memory.setter
+    def resident_memory(self, value):
+        self.__resident_memory = value
+
+    @property
+    def shared_memory(self):
+        return self.__shared_memory
+
+    @shared_memory.setter
+    def shared_memory(self, value):
+        self.__shared_memory = value
+
+    @property
+    def state(self):
+        return self.__state
+
+    @state.setter
+    def state(self, value):
+        self.__state = value
+
+    @property
+    def cpu_usage(self):
+        return self.__cpu_usage
+
+    @cpu_usage.setter
+    def cpu_usage(self, value):
+        self.__cpu_usage = value
+
+    @property
+    def memory_usage(self):
+        return self.__memory_usage
+
+    @memory_usage.setter
+    def memory_usage(self, value):
+        self.__memory_usage = value
+
+    @property
+    def time(self):
+        return self.__time
+
+    @time.setter
+    def time(self, value):
+        self.__time = value
+
+    @property
+    def command(self):
+        return self.__command
+
+    @command.setter
+    def command(self, value):
+        self.__command
+
+    def __str__(self):
+        return f'{self.__pid} {self.__user} {self.__priority} {self.__niceness} {self.__virtual_memory} ' \
+               f'{self.__resident_memory} {self.__shared_memory} {self.__state} {self.__cpu_usage} ' \
+               f'{self.__memory_usage} {self.__time} {self.__command}'
+
+
 def parse_args():
     """ Returns script options parsed from CLI arguments."""
     argparser = argparse.ArgumentParser(prog='pytop')
