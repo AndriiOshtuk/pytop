@@ -189,8 +189,8 @@ class Uptime:
 
         Attributes:
             update(): Retrieves actual uptime value from /proc/uptime.
-            uptime(): Returns system uptime (including time spent in suspend) in seconds.
-            uptime_as_string(): Returns uptime as a formatted string
+            uptime: Returns system uptime (including time spent in suspend) in seconds.
+            uptime_as_string: Returns uptime as a formatted string
 
         .. PROC(5)
             http://man7.org/linux/man-pages/man5/proc.5.html
@@ -220,6 +220,46 @@ class Uptime:
         return f"{uptime}"
 
 
+class LoadAverage:
+    """
+        The load average over 1, 5, and 15 minutes.
+
+        Class holds load average figures giving the number of jobs in the run queue (state R) or waiting for disk I/O
+        (state D) averaged over 1, 5, and 15 minutes.
+
+        Attributes:
+            update(): Retrieves actual load average value from /proc/loadavg.
+            load_average: Returns load average over 1, 5, and 15 minutes.
+            load_average_as_string: Returns load average as a formatted string
+
+        .. PROC(5)
+            http://man7.org/linux/man-pages/man5/proc.5.html
+        """
+    def __init__(self):
+        self.__load_average = (None, None, None)
+        self.update()
+
+    def update(self):
+        """Retrieves actual load average value from /proc/loadavg."""
+        self._read_file()
+
+    def _read_file(self):
+        with open('/proc/loadavg', 'r') as file:
+            values = file.read().split()[:3]
+            values = map(float, values)
+            self.__load_average = tuple(values)
+
+    @property
+    def load_average(self):
+        """Returns load average over 1, 5, and 15 minutes."""
+        return self.__load_average
+
+    @property
+    def load_average_as_string(self):
+        """Returns load average as a formatted string"""
+        return f"{self.__load_average[0]} {self.__load_average[1]} {self.__load_average[2]}"
+
+
 def parse_args():
     """ Returns script options parsed from CLI arguments."""
     argparser = argparse.ArgumentParser(prog='pytop')
@@ -247,3 +287,6 @@ if __name__ == "__main__":
 
     up = Uptime()
     print(f"Uptime:{up.uptime_as_string}")
+
+    load = LoadAverage()
+    print(f"Load average:{load.load_average}")
