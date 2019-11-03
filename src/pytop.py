@@ -452,6 +452,22 @@ class Process:
     def command(self, value):
         self.__command
 
+    @property
+    def is_running(self):
+        return self.__state == 'R'
+
+    @property
+    def is_sleeping(self):
+        return self.__state == 'S'
+
+    @property
+    def is_zombie(self):
+        return self.__state == 'Z'
+
+    @property
+    def is_stopped(self):
+        return self.__state in 'Tt'
+
     def __str__(self):
         return f'{self.__pid} {self.__user} {self.__priority} {self.__niceness} {self.__virtual_memory} ' \
                f'{self.__resident_memory} {self.__shared_memory} {self.__state} {self.__cpu_usage} ' \
