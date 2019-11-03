@@ -12,6 +12,8 @@ import argparse
 from collections import namedtuple
 from  datetime import timedelta
 import time
+import os
+import pwd
 
 
 class Utilities:
@@ -261,20 +263,106 @@ class LoadAverage:
 
 
 class Process:
-    def __init__(self, pid, user, priority, niceness, virtual_memory, resident_memory,
-                 shared_memory, state, cpu_usage, memory_usage, time, command):
+    # def __init__(self, pid, user, priority, niceness, virtual_memory, resident_memory,
+    #              shared_memory, state, cpu_usage, memory_usage, time, command):
+    #     self.__pid = pid
+    #     self.__user = user
+    #     self.__priority = priority
+    #     self.__niceness = niceness
+    #     self.__virtual_memory = virtual_memory
+    #     self.__resident_memory = resident_memory
+    #     self.__shared_memory = shared_memory
+    #     self.__state = state
+    #     self.__cpu_usage = cpu_usage
+    #     self.__memory_usage = memory_usage
+    #     self.__time = time
+    #     self.__command = command
+
+    uptime = None
+    memory_info = None
+
+    def __init__(self, pid):
         self.__pid = pid
-        self.__user = user
-        self.__priority = priority
-        self.__niceness = niceness
-        self.__virtual_memory = virtual_memory
-        self.__resident_memory = resident_memory
-        self.__shared_memory = shared_memory
-        self.__state = state
-        self.__cpu_usage = cpu_usage
-        self.__memory_usage = memory_usage
-        self.__time = time
-        self.__command = command
+        self.__user = None
+        self.__priority = None
+        self.__niceness = None
+        self.__virtual_memory = None
+        self.__resident_memory = None
+        self.__shared_memory = None
+        self.__state = None
+        self.__cpu_usage = None
+        self.__memory_usage = None
+        self.__time = None
+        self.__command = None
+        self.__clock_ticks_per_second = os.sysconf(os.sysconf_names['SC_CLK_TCK'])
+
+        self.__is_kthread = False
+        self.update()
+
+    def update(self):
+        self.read_cmdline()
+        self.read_stat()
+        self.read_status()
+
+    def read_cmdline(self):
+        """ Returns the command that originally started the process (content of /proc/PID/cmdline) """
+        filename = f'/proc/{self.__pid}/cmdline'
+        with open(filename, 'r') as file:
+            self.__command = file.read()
+
+    def read_stat(self):
+        PF_KTHREAD = 0x00200000  # TODO(AOS) Redo
+
+        filename = f'/proc/{self.__pid}/stat'
+        with open(filename, 'r') as file:
+            text = 'None '
+            text = text + file.read()
+            self.__is_kthread = True if int(text.split()[9]) & PF_KTHREAD else False
+            self.__priority = text.split()[18]  # TODO(AOS) Why the heck are you calling split so many times?
+            self.__niceness = text.split()[19]
+            total_time_ticks = int(text.split()[14]) + int(text.split()[15]) + int(text.split()[16]) + int(text.split()[17])
+            start_time_ticks = int(text.split()[22])
+            process_time_ticks = int(text.split()[14]) + int(text.split()[15])
+
+            seconds = Process.uptime.uptime - start_time_ticks / self.__clock_ticks_per_second
+            self.__cpu_usage = 100 * ((total_time_ticks / self.__clock_ticks_per_second) / seconds)
+
+            self.__time = format(process_time_ticks/ self.__clock_ticks_per_second, '.2f')  # TODO(AOS) Add proper format as HH:SS.XX
+
+    def read_status(self):  # TODO(AOS) Add user_name
+        """ Returns the tuple (process_state, process_virtmemory)  (content of /proc/PID/status) """  # TODO(AOS) Add user_name
+        filename = f'/proc/{self.__pid}/status'
+
+        with open(filename, 'r') as file:
+            for line in file:
+                if 'State:' in line:
+                    self.__state = line.split()[1]
+                elif 'Uid:' in line:
+                    user_id = line.split()[1]  # TODO(AOS) figure out whatever to use real or effective UID
+                    self.__user = pwd.getpwuid(int(user_id)).pw_name
+                elif 'VmSize:' in line:
+                    # process_vmsize = int(line.split()[1])/1024 #TODO(AOS) handles mB, kB properly
+                    vmsize = int(line.split()[1])
+                    self.__virtual_memory = str(vmsize // 1024) + 'M' if vmsize > 1024 else str(vmsize)
+                    # process_vmsize = format(int(process_vmsize), 'd')
+                elif 'VmRSS:' in line:
+                    self.__resident_memory = line.split()[1]  # TODO(AOS) Redo
+                    # print(process_vm_rss_size)
+                elif 'RssShmem:' in line:
+                    self.__shared_memory = line.split()[1]  # TODO(AOS) Redo
+
+        if self.__resident_memory != ' ':
+            self.__memory_usage = int(self.__resident_memory) * 100 / int(Process.memory_info.total_memory)
+        else:
+            self.__memory_usage = ' '
+
+    @staticmethod
+    def set_uptime(obj):
+        Process.uptime = obj
+
+    @staticmethod
+    def set_memory_info(obj):
+        Process.memory_info = obj
 
     @property
     def pid(self):
@@ -370,6 +458,17 @@ class Process:
                f'{self.__memory_usage} {self.__time} {self.__command}'
 
 
+class ProcessAnalyzer:
+    def __init__(self):
+        ...
+
+    def update(self):
+        ...
+
+    def read_folder(self):
+        ...
+
+
 def parse_args():
     """ Returns script options parsed from CLI arguments."""
     argparser = argparse.ArgumentParser(prog='pytop')
@@ -400,3 +499,11 @@ if __name__ == "__main__":
 
     load = LoadAverage()
     print(f"Load average:{load.load_average}")
+
+    Process.set_uptime(up)
+    Process.set_memory_info(memory)
+    processes = [Process(name) for name in os.listdir("/proc") if os.path.isdir("/proc/" + name) and name.isdigit()]
+    for p in processes[:]:
+        p.update()
+        print(p)
+
