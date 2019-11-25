@@ -23,18 +23,18 @@ import pwd
 #
 #     return argparser.parse_args()
 
-
-class bcolors:
-    ENDC = '\x1b[0m'
-    HEADER = '\x1b[3;30;42m'
-
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
+#
+# class bcolors:
+#     ENDC = '\x1b[0m'
+#     HEADER = '\x1b[3;30;42m'
+#
+#     OKBLUE = '\033[94m'
+#     OKGREEN = '\033[92m'
+#     WARNING = '\033[93m'
+#     FAIL = '\033[91m'
+#
+#     BOLD = '\033[1m'
+#     UNDERLINE = '\033[4m'
 
 # Transfered
 # def get_process_cmdline(pid):

@@ -159,6 +159,11 @@ class MemInfo:
         """Returns amount of swap space that is currently unused."""
         return self.__free_swap
 
+    @property
+    def total_used_memory(self):
+        """TODO(AOS)"""
+        return self.__used_memory - self.__buffers - self.__cache
+
     def update(self):
         """Retrieves fresh memory statistics from /proc/meminfo."""
         self._read_file()
@@ -263,21 +268,6 @@ class LoadAverage:
 
 
 class Process:
-    # def __init__(self, pid, user, priority, niceness, virtual_memory, resident_memory,
-    #              shared_memory, state, cpu_usage, memory_usage, time, command):
-    #     self.__pid = pid
-    #     self.__user = user
-    #     self.__priority = priority
-    #     self.__niceness = niceness
-    #     self.__virtual_memory = virtual_memory
-    #     self.__resident_memory = resident_memory
-    #     self.__shared_memory = shared_memory
-    #     self.__state = state
-    #     self.__cpu_usage = cpu_usage
-    #     self.__memory_usage = memory_usage
-    #     self.__time = time
-    #     self.__command = command
-
     uptime = None
     memory_info = None
 
@@ -351,10 +341,11 @@ class Process:
                 elif 'RssShmem:' in line:
                     self.__shared_memory = line.split()[1]  # TODO(AOS) Redo
 
-        if self.__resident_memory != ' ':
-            self.__memory_usage = int(self.__resident_memory) * 100 / int(Process.memory_info.total_memory)
-        else:
-            self.__memory_usage = ' '
+        # TODO(AOS) Uncomment!!!!
+        # if self.__resident_memory != ' ':
+        #     self.__memory_usage = int(self.__resident_memory) * 100 / int(Process.memory_info.total_memory)
+        # else:
+        #     self.__memory_usage = ' '
 
     @staticmethod
     def set_uptime(obj):
@@ -472,18 +463,6 @@ class Process:
         return f'{self.__pid} {self.__user} {self.__priority} {self.__niceness} {self.__virtual_memory} ' \
                f'{self.__resident_memory} {self.__shared_memory} {self.__state} {self.__cpu_usage} ' \
                f'{self.__memory_usage} {self.__time} {self.__command}'
-
-
-class ProcessAnalyzer:
-    def __init__(self):
-        ...
-
-    def update(self):
-        ...
-
-    def read_folder(self):
-        ...
-
 
 def parse_args():
     """ Returns script options parsed from CLI arguments."""
