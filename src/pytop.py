@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 
 """ pytop.py: Htop copycat implemented in Python. """
-import datetime
 
 __author__ = 'Andrii Oshtuk'
 __copyright__ = '(C) 2019 ' + __author__
 __license__ = "MIT"
 __version__ = '0.0.1 Alpha 1'
 
+import datetime
+import urwid
 import argparse
 from collections import namedtuple
 from  datetime import timedelta
 import time
 import os
 import pwd
+import sys
 
 
 class Utilities:
@@ -472,8 +474,52 @@ def parse_args():
 
     return argparser.parse_args()
 
+class Application(object):
+
+    def __init__(self):
+        self._txt = urwid.Text(u"Hello World")
+        self._fill = urwid.Filler(self._txt, 'top')
+        self._loop = urwid.MainLoop(self._fill,
+        	unhandled_input = self._handle_input
+        )
+
+        self._loop.set_alarm_in(1, self.refresh)
+
+    def refresh(self, loop, data):
+        # Update data here
+        self._loop.set_alarm_in(1, self.refresh)
+
+    def start(self):
+        self._loop.run()
+
+    def display_help(self):
+
+        help_screen = urwid.Overlay(
+            self._help_txt,
+            self._fill,
+            align = 'center',
+            width = 40,
+            valign = 'middle',
+            height = 10)
+
+        self._loop.widget = help_screen
+
+    def _handle_input(self, key):
+
+        if type(key) == str:
+            if key in ('q', 'Q'):
+                raise urwid.ExitMainLoop()
+            elif key in ('h', 'H'):
+                self.display_help()
+        elif type(key) == tuple:
+            pass
+
 if __name__ == "__main__":
     options = parse_args()
+
+    Application().start()
+
+    sys.exit(0)
 
     # test logic
     cpu = Cpu()
