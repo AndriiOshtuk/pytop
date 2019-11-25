@@ -471,6 +471,22 @@ class Process:
                f'{self.__resident_memory} {self.__shared_memory} {self.__state} {self.__cpu_usage} ' \
                f'{self.__memory_usage} {self.__time} {self.__command}'
 
+class ProcessesController:
+    def __init__(self, uptime, memory):
+        self._processes = []
+        Process.set_uptime(uptime)
+        Process.set_memory_info(memory)
+
+        self.update()
+
+    def update(self):
+        self._processes = [Process(name) for name in os.listdir("/proc") if
+                           os.path.isdir("/proc/" + name) and name.isdigit()]
+
+    @property
+    def processes(self):
+        return self._processes
+
 def parse_args():
     """ Returns script options parsed from CLI arguments."""
     argparser = argparse.ArgumentParser(prog='pytop')
@@ -547,29 +563,84 @@ class CpuAndMemoryPanel(urwid.WidgetWrap):
         ]
 
 
+class RightPanel(urwid.WidgetWrap):
+    """docstring for RightPanel"""
+    def __init__(self, uptime, load):
+
+        self.__uptime = uptime
+        self.__load = load
+        self.__widgets = []
+
+        self.__widgets.append(urwid.Text([('fields_names', u' Tasks:'), ' 0, 0 thr, 0 kthr; 0 running']))
+        self.__widgets.append(urwid.Text([('fields_names', u' Load average:'), ' 0.0 0.0 0.0']))
+        self.__widgets.append(urwid.Text([('fields_names', u' Uptime:'), ' -- /-- ']))
+
+        self.__panel = urwid.Pile(self.__widgets)
+        urwid.WidgetWrap.__init__(self, self.__panel)
+
+    def refresh(self):
+        self.__widgets[1].set_text([('fields_names', u' Load average:'), self.__load.load_average_as_string])
+        self.__widgets[2].set_text([('fields_names', u' Uptime:'), self.__uptime.uptime_as_string])
+
+
+class ProcessPanel(urwid.WidgetWrap):
+    """docstring for RightPanel"""
+    def __init__(self, uptime, load):
+
+        self.__uptime = uptime
+        self.__load = load
+        self.__widgets = []
+
+        self.__widgets.append(urwid.Text([('fields_names', u' Tasks:'), ' 0, 0 thr, 0 kthr; 0 running']))
+        self.__widgets.append(urwid.Text([('fields_names', u' Load average:'), ' 0.0 0.0 0.0']))
+        self.__widgets.append(urwid.Text([('fields_names', u' Uptime:'), ' -- /-- ']))
+
+        self.__panel = urwid.Pile(self.__widgets)
+        urwid.WidgetWrap.__init__(self, self.__panel)
+
+    def refresh(self):
+        self.__widgets[1].set_text([('fields_names', u' Load average:'), self.__load.load_average_as_string])
+        self.__widgets[2].set_text([('fields_names', u' Uptime:'), self.__uptime.uptime_as_string])
+
+
 class Application(object):
+
+    _palette = [
+        ('foot','black', 'dark cyan'),
+        ('normal','white', ''),
+        ('progress_bracket','white', ''),
+        ('progress_bar','dark green', ''),
+        ('cpu_pct','light gray', ''),
+        ('fields_names','dark cyan', ''),
+        ('table_header','black', 'dark green'),]
 
     def __init__(self):
         self._cpu = Cpu()
         self._memory = MemInfo()
-        self._data = [self._cpu, self._memory]
+        self._uptime = Uptime()
+        self._load = LoadAverage()
+        self._processes = ProcessesController(self._uptime, self._memory)
+        self._data = [self._cpu, self._memory, self._uptime, self._load, self._processes]
 
-        self._cpu_and_memory_panel = CpuAndMemoryPanel(self._cpu, self._memory)
+        self._left_panel = CpuAndMemoryPanel(self._cpu, self._memory)
+        self._right_panel = RightPanel(self._uptime, self._load)
+        header = urwid.Columns([self._left_panel, self._right_panel])
 
-        self._fill = urwid.Filler(self._cpu_and_memory_panel, 'top')
+        self._fill = urwid.Filler(header, 'top')
         self._loop = urwid.MainLoop(self._fill,
-        	unhandled_input = self._handle_input
+                                    self._palette,
+        	                        unhandled_input = self._handle_input
         )
 
         self._loop.set_alarm_in(1, self.refresh)
 
     def refresh(self, loop, data):
-        # Update data here
         for i in self._data:
             i.update()
 
         self._loop.set_alarm_in(1, self.refresh)
-        self._cpu_and_memory_panel.refresh()
+        self._left_panel.refresh()
+        self._right_panel.refresh()
 
     def start(self):
         self._loop.run()
@@ -596,48 +667,6 @@ class Application(object):
         elif type(key) == tuple:
             pass
 
-    def cpu_progress_markup(self, index, percent, width=29):
-        pct = "%4.1f" % percent
-        bars = int(percent * width / 100)
-        fill = width - bars
-        return [
-            ('fields_names', u'%-3.2s' % index),
-            ('progress_bracket', u'['),
-            ('progress_bar', u'|' * bars),
-            ('progress_bar', u' ' * fill),
-            ('cpu_pct', u'%5.5s%%' % pct),
-            ('progress_bracket', u']')
-        ]
-
-    def mem_usage_markup(self, txt, used, total, width=24):
-        used_mem = self.from_kB(used)
-        total_mem = self.from_kB(total)
-
-        if total > 0:
-            bars = int(used * width / total)
-        else:
-            bars = 0
-
-        fill = width - bars
-
-        return [
-            ('fields_names', txt),
-            ('progress_bracket', u'['),
-            ('progress_bar', u'|' * bars),
-            ('progress_bar', u' ' * fill),
-            ('cpu_pct', u'%4.4s%c/%4.4s%c' % (used_mem[0], used_mem[1], total_mem[0], total_mem[1])),
-            ('progress_bracket', u']')
-        ]
-
-    def from_kB(self, value):
-        result = (0.0, ' ')
-        if value < 1024:
-            prefix = (value, 'K')
-        elif value < 1024 * 1024:
-            prefix = (value / 1024, 'M')
-        elif value < 1024 * 1024 * 1024:
-            prefix = (value / (1024 * 1024), 'G')
-        return prefix
 
 if __name__ == "__main__":
     options = parse_args()
