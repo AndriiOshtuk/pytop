@@ -166,6 +166,11 @@ class MemInfo:
         """TODO(AOS)"""
         return self.__used_memory - self.__buffers - self.__cache
 
+    @property
+    def total_used_swap(self):
+        """TODO(AOS)"""
+        return self.__total_swap - self.__free_swap
+
     def update(self):
         """Retrieves fresh memory statistics from /proc/meminfo."""
         self._read_file()
@@ -474,11 +479,84 @@ def parse_args():
 
     return argparser.parse_args()
 
+
+def from_kB(value):
+    result = (0.0, ' ')
+    if value < 1024:
+        prefix = (value, 'K')
+    elif value < 1024*1024:
+        prefix = (value/1024, 'M')
+    elif value < 1024*1024*1024:
+        prefix = (value/(1024*1024), 'G')
+    return prefix
+
+class CpuAndMemoryPanel(urwid.WidgetWrap):
+    """docstring for CpuAndMemoryPanel"""
+    def __init__(self, cpu, memory):
+
+        self.__cpu = cpu
+        self.__memory = memory
+        self.__widgets = []
+
+        for i, value in enumerate(self.__cpu.cpu_usage):
+            self.__widgets.append(urwid.Text(self._cpu_progress_markup(i+1, 0.0)))
+
+        self.__widgets.append(urwid.Text(self._mem_usage_markup('Mem',0.0, 0.0)))
+        self.__widgets.append(urwid.Text(self._mem_usage_markup('Swp',0.0, 0.0)))
+        self.__panel = urwid.Pile(self.__widgets)
+        urwid.WidgetWrap.__init__(self, self.__panel)
+
+    def refresh(self):
+        for i, value in enumerate(self.__cpu.cpu_usage):
+            self.__widgets[i].set_text(self._cpu_progress_markup(i+1, value))
+
+        self.__widgets[-1].set_text(self._mem_usage_markup('Mem', self.__memory.total_used_memory, self.__memory.total_memory))
+        self.__widgets[-2].set_text(self._mem_usage_markup('Swp', self.__memory.total_used_swap, self.__memory.total_swap))
+
+    def _cpu_progress_markup(self, index, percent, width=29):
+        pct = "%4.1f" % percent
+        bars = int(percent*width/100)
+        fill = width - bars
+        return [
+        ('fields_names', u'%-3.2s' % index),
+        ('progress_bracket', u'['),
+        ('progress_bar', u'|'*bars),
+        ('progress_bar', u' ' * fill),
+        ('cpu_pct', u'%5.5s%%' % pct),
+        ('progress_bracket', u']')
+        ]
+
+    def _mem_usage_markup(self, txt, used, total, width=24):
+        used_mem = from_kB(used)
+        total_mem = from_kB(total)
+
+        if total > 0:
+            bars = int(used * width / total)
+        else:
+            bars = 0
+
+        fill = width - bars
+
+        return [
+        ('fields_names', txt),
+        ('progress_bracket', u'['),
+        ('progress_bar', u'|'*bars),
+        ('progress_bar', u' ' * fill),
+        ('cpu_pct', u'%4.4s%c/%4.4s%c' % (used_mem[0], used_mem[1], total_mem[0], total_mem[1])),
+        ('progress_bracket', u']')
+        ]
+
+
 class Application(object):
 
     def __init__(self):
-        self._txt = urwid.Text(u"Hello World")
-        self._fill = urwid.Filler(self._txt, 'top')
+        self._cpu = Cpu()
+        self._memory = MemInfo()
+        self._data = [self._cpu, self._memory]
+
+        self._cpu_and_memory_panel = CpuAndMemoryPanel(self._cpu, self._memory)
+
+        self._fill = urwid.Filler(self._cpu_and_memory_panel, 'top')
         self._loop = urwid.MainLoop(self._fill,
         	unhandled_input = self._handle_input
         )
@@ -487,7 +565,11 @@ class Application(object):
 
     def refresh(self, loop, data):
         # Update data here
+        for i in self._data:
+            i.update()
+
         self._loop.set_alarm_in(1, self.refresh)
+        self._cpu_and_memory_panel.refresh()
 
     def start(self):
         self._loop.run()
@@ -513,6 +595,49 @@ class Application(object):
                 self.display_help()
         elif type(key) == tuple:
             pass
+
+    def cpu_progress_markup(self, index, percent, width=29):
+        pct = "%4.1f" % percent
+        bars = int(percent * width / 100)
+        fill = width - bars
+        return [
+            ('fields_names', u'%-3.2s' % index),
+            ('progress_bracket', u'['),
+            ('progress_bar', u'|' * bars),
+            ('progress_bar', u' ' * fill),
+            ('cpu_pct', u'%5.5s%%' % pct),
+            ('progress_bracket', u']')
+        ]
+
+    def mem_usage_markup(self, txt, used, total, width=24):
+        used_mem = self.from_kB(used)
+        total_mem = self.from_kB(total)
+
+        if total > 0:
+            bars = int(used * width / total)
+        else:
+            bars = 0
+
+        fill = width - bars
+
+        return [
+            ('fields_names', txt),
+            ('progress_bracket', u'['),
+            ('progress_bar', u'|' * bars),
+            ('progress_bar', u' ' * fill),
+            ('cpu_pct', u'%4.4s%c/%4.4s%c' % (used_mem[0], used_mem[1], total_mem[0], total_mem[1])),
+            ('progress_bracket', u']')
+        ]
+
+    def from_kB(self, value):
+        result = (0.0, ' ')
+        if value < 1024:
+            prefix = (value, 'K')
+        elif value < 1024 * 1024:
+            prefix = (value / 1024, 'M')
+        elif value < 1024 * 1024 * 1024:
+            prefix = (value / (1024 * 1024), 'G')
+        return prefix
 
 if __name__ == "__main__":
     options = parse_args()
