@@ -7,12 +7,12 @@ __copyright__ = '(C) 2019 ' + __author__
 __license__ = "MIT"
 __version__ = '0.0.1 Alpha 1'
 
-import datetime
 import urwid
 import argparse
+
 from collections import namedtuple
 from  datetime import timedelta
-import time
+# import time
 import os
 import pwd
 import sys
@@ -283,14 +283,14 @@ class Process:
         self.__user = None
         self.__priority = None
         self.__niceness = None
-        self.__virtual_memory = None
-        self.__resident_memory = None
-        self.__shared_memory = None
+        self.__virtual_memory = 0.0
+        self.__resident_memory = 0.0
+        self.__shared_memory = 0.0
         self.__state = None
-        self.__cpu_usage = None
-        self.__memory_usage = None
-        self.__time = None
-        self.__command = None
+        self.__cpu_usage = 0.0
+        self.__memory_usage = 0.0
+        self.__time = 0.0
+        self.__command = ''
         self.__clock_ticks_per_second = os.sysconf(os.sysconf_names['SC_CLK_TCK'])
 
         self.__is_kthread = False
@@ -332,6 +332,8 @@ class Process:
 
         with open(filename, 'r') as file:
             for line in file:
+                if not self.__command and 'Name' in line :
+                    self.__command = line.split()[1]
                 if 'State:' in line:
                     self.__state = line.split()[1]
                 elif 'Uid:' in line:
@@ -436,7 +438,17 @@ class Process:
 
     @property
     def time(self):
-        return self.__time
+        # return str(timedelta(seconds=float(self.__time)))
+
+        d = timedelta(seconds=float(self.__time))
+
+        hours, remainder = divmod(d.total_seconds(), 3600)
+        minutes, seconds = divmod(remainder, 60)
+
+        if hours > 0.0:
+            return '%dh%d:%d' % (int(hours), int(minutes), int(seconds))
+        else:
+            return '%.0f:%.2f' % (minutes, seconds)
 
     @time.setter
     def time(self, value):
@@ -584,23 +596,37 @@ class RightPanel(urwid.WidgetWrap):
 
 
 class ProcessPanel(urwid.WidgetWrap):
-    """docstring for RightPanel"""
-    def __init__(self, uptime, load):
+    """docstring for ProcessPanel"""
+    def __init__(self, controller):
 
-        self.__uptime = uptime
-        self.__load = load
-        self.__widgets = []
+        self.__controller = controller
+        self.__header = urwid.Text(('table_header',u'  PID USER      PRI    NI VIRT   RES  SHR S  CPU%  MEM%      TIME+   Command'))
 
-        self.__widgets.append(urwid.Text([('fields_names', u' Tasks:'), ' 0, 0 thr, 0 kthr; 0 running']))
-        self.__widgets.append(urwid.Text([('fields_names', u' Load average:'), ' 0.0 0.0 0.0']))
-        self.__widgets.append(urwid.Text([('fields_names', u' Uptime:'), ' -- /-- ']))
+        self.__processes = []
 
-        self.__panel = urwid.Pile(self.__widgets)
-        urwid.WidgetWrap.__init__(self, self.__panel)
+        for pr in self.__controller.processes:
+            self.__processes.append(urwid.Text(self._process_markup(pr)))
+
+        self.__table_view = urwid.ListBox(urwid.SimpleFocusListWalker(self.__processes))
+        self.__table_widget = urwid.Frame(self.__table_view, header=self.__header)
+
+        urwid.WidgetWrap.__init__(self, self.__table_widget)
 
     def refresh(self):
-        self.__widgets[1].set_text([('fields_names', u' Load average:'), self.__load.load_average_as_string])
-        self.__widgets[2].set_text([('fields_names', u' Uptime:'), self.__uptime.uptime_as_string])
+        self.__processes = []
+
+        for pr in self.__controller.processes:
+            self.__processes.append(urwid.Text(self._process_markup(pr)))
+
+    def _process_markup(self, pr):
+        # return ('progress_bracket', u'%s %s \t%s\t%s %sM %s %s %s  %s  %s %s %s'.expandtabs()
+        #         % (pr.pid, pr.user, pr.priority, pr.niceness, pr.virtual_memory, pr.resident_memory, pr.shared_memory, pr.state, pr.cpu_usage, pr.memory_usage, pr.time, pr.command))
+
+        priority = 'RT' if pr.priority == '-100' else pr.priority
+
+        return ('progress_bracket', u'%5.5s %-10.10s \t%4.4s %4.4s %4.4sM %4.4s %4.4s %1.1s  %4.1f  %4.1f %8.18s %s'.expandtabs()
+                 % (pr.pid, pr.user, priority, pr.niceness, pr.virtual_memory, pr.resident_memory, pr.shared_memory,
+                   pr.state, pr.cpu_usage, pr.memory_usage, pr.time, pr.command[:20]))
 
 
 class Application(object):
@@ -624,13 +650,24 @@ class Application(object):
 
         self._left_panel = CpuAndMemoryPanel(self._cpu, self._memory)
         self._right_panel = RightPanel(self._uptime, self._load)
-        header = urwid.Columns([self._left_panel, self._right_panel])
+        self._header = urwid.Columns([self._left_panel, self._right_panel])
 
-        self._fill = urwid.Filler(header, 'top')
-        self._loop = urwid.MainLoop(self._fill,
+        f1 = urwid.Button([('normal', u'F1'), ('foot', u'Help')])
+        urwid.connect_signal(f1, 'click', self._handle_f1_buton)
+
+        f10 = urwid.Button([('normal', u'F10'), ('foot', u'Exit')])
+        urwid.connect_signal(f10, 'click', self._handle_f10_buton)
+
+        self._buttons = urwid.Columns([f1, f10])
+
+        self._proc_table = ProcessPanel(self._processes)
+        self._main_widget = urwid.Frame(self._proc_table, header=self._header, footer=self._buttons)
+
+        # self._fill = urwid.Filler(header, 'top')
+        self._loop = urwid.MainLoop(self._main_widget,
                                     self._palette,
-        	                        unhandled_input = self._handle_input
-        )
+                                    unhandled_input = self._handle_input
+                                    )
 
         self._loop.set_alarm_in(1, self.refresh)
 
@@ -666,6 +703,36 @@ class Application(object):
                 self.display_help()
         elif type(key) == tuple:
             pass
+
+    def _handle_f1_buton(self, key):
+        ...
+
+    def _handle_f2_buton(self, key):
+        ...
+
+    def _handle_f3_buton(self, key):
+        ...
+
+    def _handle_f4_buton(self, key):
+        ...
+
+    def _handle_f5_buton(self, key):
+        ...
+
+    def _handle_f6_buton(self, key):
+        ...
+
+    def _handle_f7_buton(self, key):
+        ...
+
+    def _handle_f8_buton(self, key):
+        ...
+
+    def _handle_f9_buton(self, key):
+        ...
+
+    def _handle_f10_buton(self, key):
+        raise urwid.ExitMainLoop()
 
 
 if __name__ == "__main__":
