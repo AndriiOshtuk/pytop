@@ -499,6 +499,14 @@ class ProcessesController:
     def processes(self):
         return self._processes
 
+    @property
+    def proccesses_number(self):
+        return len(self._processes)
+
+    @property
+    def running_proccesses_number(self):
+        return len([filter(lambda el: el.is_running(), self._processes)])
+
 def parse_args():
     """ Returns script options parsed from CLI arguments."""
     argparser = argparse.ArgumentParser(prog='pytop')
@@ -538,8 +546,8 @@ class CpuAndMemoryPanel(urwid.WidgetWrap):
         for i, value in enumerate(self.__cpu.cpu_usage):
             self.__widgets[i].set_text(self._cpu_progress_markup(i+1, value))
 
-        self.__widgets[-1].set_text(self._mem_usage_markup('Mem', self.__memory.total_used_memory, self.__memory.total_memory))
-        self.__widgets[-2].set_text(self._mem_usage_markup('Swp', self.__memory.total_used_swap, self.__memory.total_swap))
+        self.__widgets[-2].set_text(self._mem_usage_markup('Mem', self.__memory.total_used_memory, self.__memory.total_memory))
+        self.__widgets[-1].set_text(self._mem_usage_markup('Swp', self.__memory.total_used_swap, self.__memory.total_swap))
 
     def _cpu_progress_markup(self, index, percent, width=29):
         pct = "%4.1f" % percent
@@ -577,8 +585,9 @@ class CpuAndMemoryPanel(urwid.WidgetWrap):
 
 class RightPanel(urwid.WidgetWrap):
     """docstring for RightPanel"""
-    def __init__(self, uptime, load):
+    def __init__(self, controller, uptime, load):
 
+        self.__controller = controller
         self.__uptime = uptime
         self.__load = load
         self.__widgets = []
@@ -591,6 +600,7 @@ class RightPanel(urwid.WidgetWrap):
         urwid.WidgetWrap.__init__(self, self.__panel)
 
     def refresh(self):
+        self.__widgets[0].set_text([('fields_names', u' Tasks:'), f' {self.__controller.proccesses_number}, 0 thr, 0 kthr; {self.__controller.running_proccesses_number} running'])
         self.__widgets[1].set_text([('fields_names', u' Load average:'), self.__load.load_average_as_string])
         self.__widgets[2].set_text([('fields_names', u' Uptime:'), self.__uptime.uptime_as_string])
 
@@ -600,7 +610,7 @@ class ProcessPanel(urwid.WidgetWrap):
     def __init__(self, controller):
 
         self.__controller = controller
-        self.__header = urwid.Text(('table_header',u'  PID USER      PRI    NI VIRT   RES  SHR S  CPU%  MEM%      TIME+   Command'))
+        self.__header = urwid.Text(('table_header',u'  PID USER       PRI    NI VIRT   RES  SHR S  CPU%  MEM%      TIME+   Command'))
 
         self.__processes = []
 
@@ -619,14 +629,21 @@ class ProcessPanel(urwid.WidgetWrap):
             self.__processes.append(urwid.Text(self._process_markup(pr)))
 
     def _process_markup(self, pr):
-        # return ('progress_bracket', u'%s %s \t%s\t%s %sM %s %s %s  %s  %s %s %s'.expandtabs()
-        #         % (pr.pid, pr.user, pr.priority, pr.niceness, pr.virtual_memory, pr.resident_memory, pr.shared_memory, pr.state, pr.cpu_usage, pr.memory_usage, pr.time, pr.command))
-
         priority = 'RT' if pr.priority == '-100' else pr.priority
 
-        return ('progress_bracket', u'%5.5s %-10.10s \t%4.4s %4.4s %4.4sM %4.4s %4.4s %1.1s  %4.1f  %4.1f %8.18s %s'.expandtabs()
-                 % (pr.pid, pr.user, priority, pr.niceness, pr.virtual_memory, pr.resident_memory, pr.shared_memory,
-                   pr.state, pr.cpu_usage, pr.memory_usage, pr.time, pr.command[:20]))
+        result = []
+        result.append(('progress_bracket', u'%5.5s %-10.10s %4.4s' % (pr.pid, pr.user, priority)))
+
+        if int(pr.niceness) < 0:
+            result.append(('niceness', u' %4.4s' % pr.niceness))
+        else:
+            result.append(('progress_bracket', u' %4.4s' % pr.niceness))
+
+        result.append(('progress_bracket', u' %4.4sM %4.4s %4.4s %1.1s  %4.1f  %4.1f %8.18s %s'
+         % (pr.virtual_memory, pr.resident_memory, pr.shared_memory,
+            pr.state, pr.cpu_usage, pr.memory_usage, pr.time, pr.command[:20])))
+
+        return result
 
 
 class Application(object):
@@ -638,7 +655,8 @@ class Application(object):
         ('progress_bar','dark green', ''),
         ('cpu_pct','light gray', ''),
         ('fields_names','dark cyan', ''),
-        ('table_header','black', 'dark green'),]
+        ('table_header','black', 'dark green'),
+        ('niceness','dark red', ''),]
 
     def __init__(self):
         self._cpu = Cpu()
@@ -649,16 +667,25 @@ class Application(object):
         self._data = [self._cpu, self._memory, self._uptime, self._load, self._processes]
 
         self._left_panel = CpuAndMemoryPanel(self._cpu, self._memory)
-        self._right_panel = RightPanel(self._uptime, self._load)
+        self._right_panel = RightPanel(self._processes, self._uptime, self._load)
         self._header = urwid.Columns([self._left_panel, self._right_panel])
 
         f1 = urwid.Button([('normal', u'F1'), ('foot', u'Help')])
         urwid.connect_signal(f1, 'click', self._handle_f1_buton)
 
-        f10 = urwid.Button([('normal', u'F10'), ('foot', u'Exit')])
+        # f2 = urwid.Button([('normal', u'F2'), ('foot', u'Setup')])
+        f3 = urwid.Button([('normal', u'F3'), ('foot', u'Search')])
+        f4 = urwid.Button([('normal', u'F4'), ('foot', u'Filter')])
+        # f5 = urwid.Button([('normal', u'F5'), ('foot', u'Tree')])
+        f6 = urwid.Button([('normal', u'F6'), ('foot', u'SortBy')])
+        f7 = urwid.Button([('normal', u'F7'), ('foot', u'Nice-')])
+        f8 = urwid.Button([('normal', u'F8'), ('foot', u'Nice+')])
+        # f9 = urwid.Button([('normal', u'F9'), ('foot', u'Kill')])
+
+        f10 = urwid.Button([('normal', u'F10'), ('foot', u'Quit')])
         urwid.connect_signal(f10, 'click', self._handle_f10_buton)
 
-        self._buttons = urwid.Columns([f1, f10])
+        self._buttons = urwid.Columns([f1, f3, f4, f6, f7, f8, f10])
 
         self._proc_table = ProcessPanel(self._processes)
         self._main_widget = urwid.Frame(self._proc_table, header=self._header, footer=self._buttons)
@@ -683,29 +710,37 @@ class Application(object):
         self._loop.run()
 
     def display_help(self):
+        help_txt = \
+        f"""
+        Pytop {__version__} - {__copyright__}
+        Released under the {__license__}.
 
-        help_screen = urwid.Overlay(
-            self._help_txt,
-            self._fill,
-            align = 'center',
-            width = 40,
-            valign = 'middle',
-            height = 10)
+        Pytop is the htop copycat implemented in Python.
+        
+        usage: pytop [-h] [-v]
 
-        self._loop.widget = help_screen
+        optional arguments:
+            -h, --help     show this help message and exit
+            -v, --version  show program's version number and exit
+        """
+        self._help_txt = urwid.Text([('normal' ,help_txt), ('fields_names', u'\nPress any key to return')], align='left')
+        fill = urwid.Filler(self._help_txt, 'top')
+        self._loop.widget = fill
 
     def _handle_input(self, key):
 
         if type(key) == str:
-            if key in ('q', 'Q'):
-                raise urwid.ExitMainLoop()
-            elif key in ('h', 'H'):
+            # if key in ('q', 'Q'):
+            #     raise urwid.ExitMainLoop()
+            if key == 'f1':
                 self.display_help()
+            else:
+                self._loop.widget = self._main_widget
         elif type(key) == tuple:
             pass
 
     def _handle_f1_buton(self, key):
-        ...
+        self.display_help()
 
     def _handle_f2_buton(self, key):
         ...
