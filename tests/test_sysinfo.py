@@ -1,5 +1,5 @@
 from unittest.mock import patch, mock_open
-from src.sysinfo import Cpu, SystemInfoError
+from src.sysinfo import Cpu, SystemInfoError, LoadAverage
 import pytest
 
 
@@ -67,3 +67,53 @@ class TestCpu:
             cpu.update()
             assert cpu.cpu_usage == [expected] * 4
             mock_file.assert_called_with("/proc/stat")
+
+
+class TestLoadAverage:
+    result_vs_files = [
+        ((0.63, 0.41, 0.77), 'tests/test_sysinfo/020_loadavg'),
+        ((0.0, 0.5, 2.0), 'tests/test_sysinfo/021_loadavg'),
+        ((4.0, 4.5, 4.0), 'tests/test_sysinfo/022_loadavg'),
+    ]
+
+    result_str_vs_files = [
+        ('0.63 0.41 0.77', 'tests/test_sysinfo/020_loadavg'),
+        ('0.0 0.5 2.0', 'tests/test_sysinfo/021_loadavg'),
+        ('4.0 4.5 4.0', 'tests/test_sysinfo/022_loadavg'),
+    ]
+
+    wrong_format_files = [
+        'tests/test_sysinfo/023_loadavg_wrong_format',
+        'tests/test_sysinfo/024_loadavg_wrong_format',
+    ]
+
+    def test_no_file(self):
+        with pytest.raises(OSError):
+            with patch('builtins.open') as mock_open:
+                mock_open.side_effect = OSError
+                loadavg = LoadAverage()
+
+    @pytest.mark.parametrize('filename', wrong_format_files)
+    def test_wrong_format(self, read_file, filename):
+        data = read_file(filename)
+        with pytest.raises(SystemInfoError) as ex:
+            with patch("builtins.open", mock_open(read_data=data)) as mock_file:
+                loadavg = LoadAverage()
+
+        assert str(ex.value) == 'Cannot parse /proc/loadavg file'
+
+    @pytest.mark.parametrize('expected, filename', result_vs_files)
+    def test_load_average(self, read_file, expected, filename):
+        data = read_file(filename)
+        with patch("builtins.open", mock_open(read_data=data)) as mock_file:
+            loadavg = LoadAverage()
+            assert loadavg.load_average == expected
+            mock_file.assert_called_with("/proc/loadavg")
+
+    @pytest.mark.parametrize('expected, filename', result_str_vs_files)
+    def test_load_average_as_string(self, read_file, expected, filename):
+        data = read_file(filename)
+        with patch("builtins.open", mock_open(read_data=data)) as mock_file:
+            loadavg = LoadAverage()
+            assert loadavg.load_average_as_string == expected
+            mock_file.assert_called_with("/proc/loadavg")

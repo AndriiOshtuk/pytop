@@ -84,3 +84,47 @@ class Cpu:
             raise SystemInfoError('Cannot parse /proc/stat file')
 
         return lst
+
+
+class LoadAverage:
+    """
+        The load average over 1, 5, and 15 minutes.
+
+        Class holds load average figures giving the number of jobs in the run queue (state R) or waiting for disk I/O
+        (state D) averaged over 1, 5, and 15 minutes.
+
+        Attributes:
+            update(): Retrieves actual load average value from /proc/loadavg.
+            load_average: Returns load average over 1, 5, and 15 minutes.
+            load_average_as_string: Returns load average as a formatted string 'x.xx x.xx x.xx'.
+
+        .. PROC(5)
+            http://man7.org/linux/man-pages/man5/proc.5.html
+    """
+
+    def __init__(self):
+        self._load_average = (None, None, None)
+        self.update()
+
+    def update(self):
+        """Retrieves actual load average value from /proc/loadavg."""
+        self._read_file()
+
+    def _read_file(self):
+        with open('/proc/loadavg') as file:
+            try:
+                t1, t5, t15, *_ = file.read().split()
+                values = map(float, [t1, t5, t15])
+                self._load_average = tuple(values)
+            except (ValueError, TypeError):
+                raise SystemInfoError('Cannot parse /proc/loadavg file')
+
+    @property
+    def load_average(self):
+        """Returns load average over 1, 5, and 15 minutes."""
+        return self._load_average
+
+    @property
+    def load_average_as_string(self):
+        """Returns load average as a formatted string 'x.xx x.xx x.xx'."""
+        return f"{self._load_average[0]} {self._load_average[1]} {self._load_average[2]}"
