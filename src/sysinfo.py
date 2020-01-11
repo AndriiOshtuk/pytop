@@ -5,13 +5,14 @@
 __author__ = 'Andrii Oshtuk'
 __copyright__ = '(C) 2019 ' + __author__
 __license__ = "MIT"
-__version__ = '0.0.1 Alpha 1'
+__version__ = '1.0.0'
 
-import os
-import os
-import pwd
 from collections import namedtuple
-from datetime import timedelta
+
+
+class SystemInfoError(Exception):
+    """Raised when error occur during system information access"""
+    pass
 
 
 class Cpu:
@@ -23,44 +24,42 @@ class Cpu:
 
     Attributes:
         update(): Retrieves fresh CPU statistics.
-        cpu_usage: List of CPUs usage for each CPU measured between last two update() calls.
+        cpu_usage: List of CPUs usage per CPU measured between last two update() calls.
 
     .. PROC(5)
         http://man7.org/linux/man-pages/man5/proc.5.html
     """
 
-    CpuStat = namedtuple('CpuStat',
-                         ['name', 'user', 'nice', 'system', 'idle', 'iowait', 'irq', 'softirq', 'steal', 'guest',
-                          'guest_nice'])
+    CpuStat = namedtuple('CpuStat', ['name', 'user', 'nice', 'system', 'idle', 'iowait',
+                                     'irq', 'softirq', 'steal', 'guest', 'guest_nice'])
 
     def __init__(self):
-        self.prev_stat = self._read_file()
-        self.current_stat = self.prev_stat
+        self.prev_stat = Cpu._read_file()
+        self.curr_stat = self.prev_stat
 
     def update(self):
         """ Retrieves fresh CPU statistics and stores previous statistics. """
-        self.prev_stat = self.current_stat
-        self.current_stat = self._read_file()
+        self.prev_stat = self.curr_stat
+        self.curr_stat = Cpu._read_file()
 
     @property
-    def cpu_usage(self):
-        """ List of CPU usage for each CPU measured between last two update() calls."""
+    def cpu_usage(self) -> list:
+        """:obj:`list` of :obj:`float`: List of CPU usage per CPU measured between last two update() calls."""
         cpu_usage = []
 
-        for (prev, new) in zip(self.prev_stat, self.current_stat):
+        for prev, new in zip(self.prev_stat, self.curr_stat):
             idle_prev = prev.idle + prev.iowait
-            idle_new = new.idle + new.iowait
-
             non_idle_prev = prev.user + prev.nice + prev.system + prev.irq + prev.softirq + prev.steal
-            non_idle_new = new.user + new.nice + new.system + new.irq + new.softirq + new.steal
-
             total_prev = idle_prev + non_idle_prev
+
+            idle_new = new.idle + new.iowait
+            non_idle_new = new.user + new.nice + new.system + new.irq + new.softirq + new.steal
             total_new = idle_new + non_idle_new
 
             total_diff = total_new - total_prev
             idle_diff = idle_new - idle_prev
 
-            if not total_diff:
+            if total_diff <= 0:
                 cpu_usage.append(0.0)
                 continue
 
@@ -69,15 +68,19 @@ class Cpu:
 
         return cpu_usage
 
-    def _read_file(self) -> list:
+    @staticmethod
+    def _read_file() -> list:
         lst = []
         with open('/proc/stat') as file:
             for line in file:
                 if line.startswith('cpu '):
                     continue
                 elif line.startswith('cpu'):
-                    values = map(int, line.split()[1:])
-                    temp = Cpu.CpuStat(line.split()[0], *values)
-                    lst.append(temp)
+                    name, *values = line.split()
+                    values = map(int, values)
+                    temp_tuple = Cpu.CpuStat(name, *values)
+                    lst.append(temp_tuple)
+        if not lst:
+            raise SystemInfoError('Cannot parse /proc/stat file')
 
         return lst

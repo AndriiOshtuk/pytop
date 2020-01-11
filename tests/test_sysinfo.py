@@ -1,34 +1,69 @@
 from unittest.mock import patch, mock_open
-from src.sysinfo import Cpu
+from src.sysinfo import Cpu, SystemInfoError
+import pytest
 
 
-proc_stat_file = """cpu  5274326 17728 1182208 131379849 114680 0 83968 0 0 0
-cpu0 1329684 3284 309588 33121099 28015 0 11121 0 0 0
-cpu1 1329426 5378 287809 32705466 28277 0 36700 0 0 0
-cpu2 1317259 4932 286286 32766182 27953 0 15340 0 0 0
-cpu3 1297956 4133 298522 32787100 30433 0 20805 0 0 0
-intr 187225502 8 2075 0 0 0 0 0 0 1 494585 0 0 224 0 0 0 2941 4961 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 61 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 28591208 40 47 18763229 875990 1390347 971329 903082 6189019 948078 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
-ctxt 457464348
-btime 1575306113
-processes 113864
-procs_running 1
-procs_blocked 0
-softirq 118274096 17901176 34321374 371 7208471 3 3 1023980 34425567 0 23393151
-"""
+@pytest.fixture()
+def read_file():
+    def _read_file(name):
+        with open(name) as f:
+            return f.read()
+    return _read_file
 
-def test_option_2():
-    with patch("builtins.open", mock_open(read_data=proc_stat_file)) as mock_file:
+class TestCpu:
 
-        cpu = Cpu()
-        lst = cpu._read_file()
+    usage_vs_files = [
+        (0.0, 'tests/test_sysinfo/010_proc_stat_usage_0_pct'),
+        (25.0, 'tests/test_sysinfo/011_proc_stat_usage_25_pct'),
+        (50.0, 'tests/test_sysinfo/012_proc_stat_usage_50_pct'),
+        (75.0, 'tests/test_sysinfo/013_proc_stat_usage_75_pct'),
+        (100.0, 'tests/test_sysinfo/014_proc_stat_usage_100_pct'),
+    ]
 
-        cpu0 = Cpu.CpuStat('cpu0', 1329684, 3284, 309588, 33121099, 28015, 0, 11121, 0, 0, 0)
-        cpu1 = Cpu.CpuStat('cpu1', 1329426, 5378, 287809, 32705466, 28277, 0, 36700, 0, 0, 0)
-        cpu2 = Cpu.CpuStat('cpu2', 1317259, 4932, 286286, 32766182, 27953, 0, 15340, 0, 0, 0)
-        cpu3 = Cpu.CpuStat('cpu3', 1297956, 4133, 298522, 32787100, 30433, 0, 20805, 0, 0, 0)
+    def test_create_cpu_obj(self, read_file):
+        data = read_file('tests/test_sysinfo/001_proc_stat')
+        with patch("builtins.open", mock_open(read_data=data)) as mock_file:
+            cpu = Cpu()
+            assert cpu.cpu_usage == [0.0, 0.0, 0.0, 0.0]
+            mock_file.assert_called_with("/proc/stat")
 
-        assert cpu0 == lst[0]
-        assert cpu1 == lst[1]
-        assert cpu2 == lst[2]
-        assert cpu3 == lst[3]
-        mock_file.assert_called_with("/proc/stat")
+    def test_no_file(self):
+        with pytest.raises(OSError):
+            with patch('builtins.open') as mock_open:
+                mock_open.side_effect = OSError
+                cpu = Cpu()
+
+    def test_create_1cpu_obj(self, read_file):
+        data = read_file('tests/test_sysinfo/003_proc_stat_1_cpu')
+        with patch("builtins.open", mock_open(read_data=data)) as mock_file:
+            cpu = Cpu()
+            assert cpu.cpu_usage == [0.0]
+            mock_file.assert_called_with("/proc/stat")
+
+    def test_create_32cpu_obj(self, read_file):
+        data = read_file('tests/test_sysinfo/002_proc_stat_32_cpu')
+        with patch("builtins.open", mock_open(read_data=data)) as mock_file:
+            cpu = Cpu()
+            assert cpu.cpu_usage == [0.0] * 32
+            mock_file.assert_called_with("/proc/stat")
+
+    def test_wrong_format(self, read_file):
+        data = read_file('tests/test_sysinfo/004_proc_stat_wrong_format')
+        with pytest.raises(SystemInfoError) as ex:
+            with patch("builtins.open", mock_open(read_data=data)) as mock_file:
+                cpu = Cpu()
+
+        assert str(ex.value) == 'Cannot parse /proc/stat file'
+
+    @pytest.mark.parametrize('expected, filename', usage_vs_files)
+    def test_cpu_usage_n_pct(self, read_file, expected, filename):
+        data = read_file('tests/test_sysinfo/001_proc_stat')
+        with patch("builtins.open", mock_open(read_data=data)) as mock_file:
+            cpu = Cpu()
+            mock_file.assert_called_with("/proc/stat")
+
+        data = read_file(filename)
+        with patch("builtins.open", mock_open(read_data=data)) as mock_file:
+            cpu.update()
+            assert cpu.cpu_usage == [expected] * 4
+            mock_file.assert_called_with("/proc/stat")
