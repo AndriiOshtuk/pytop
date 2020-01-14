@@ -8,6 +8,7 @@ __license__ = "MIT"
 __version__ = '1.0.0'
 
 from collections import namedtuple
+from datetime import timedelta
 
 
 class SystemInfoError(Exception):
@@ -103,11 +104,11 @@ class LoadAverage:
     """
 
     def __init__(self):
-        self._load_average = self._read_file()
+        self._load_average = LoadAverage._read_file()
 
     def update(self):
         """Retrieves actual load average value from /proc/loadavg."""
-        self._load_average = self._read_file()
+        self._load_average = LoadAverage._read_file()
 
     @staticmethod
     def _read_file():
@@ -126,5 +127,48 @@ class LoadAverage:
 
     @property
     def load_average_as_string(self):
-        """:obj:`str`:Returns load average as a formatted string 'x.xx x.xx x.xx'."""
+        """:obj:`str`: Returns load average as a formatted string 'x.xx x.xx x.xx'."""
         return f"{self._load_average[0]} {self._load_average[1]} {self._load_average[2]}"
+
+
+class Uptime:
+    """
+        The uptime of the system
+
+        Class holds system uptime (including time spent in suspend) fetched from /proc/uptime file.
+
+        Attributes:
+            update(): Retrieves actual uptime value from /proc/uptime.
+            uptime: Returns system uptime (including time spent in suspend) in seconds.
+            uptime_as_string: Returns uptime as a formatted string 'dd hh:mm:ss'
+
+        .. PROC(5)
+            http://man7.org/linux/man-pages/man5/proc.5.html
+    """
+
+    def __init__(self):
+        self._uptime = Uptime._read_file()
+
+    def update(self):
+        """Retrieves actual uptime value from /proc/uptime."""
+        self._uptime = Uptime._read_file()
+
+    @staticmethod
+    def _read_file():
+        with open('/proc/uptime') as file:
+            try:
+                value = file.read().split()[0]
+                return int(float(value))
+            except (IndexError, ValueError, TypeError):
+                raise SystemInfoError('Cannot parse /proc/uptime file')
+
+    @property
+    def uptime(self):
+        """:obj:`int`: Returns system uptime (including time spent in suspend) in seconds."""
+        return self._uptime
+
+    @property
+    def uptime_as_string(self):
+        """:obj:`str`: Returns uptime as a formatted string 'dd hh:mm:ss'"""
+        uptime = timedelta(seconds=self._uptime)
+        return f"{uptime}"
