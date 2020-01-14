@@ -103,28 +103,28 @@ class LoadAverage:
     """
 
     def __init__(self):
-        self._load_average = (None, None, None)
-        self.update()
+        self._load_average = self._read_file()
 
     def update(self):
         """Retrieves actual load average value from /proc/loadavg."""
-        self._read_file()
+        self._load_average = self._read_file()
 
-    def _read_file(self):
+    @staticmethod
+    def _read_file():
         with open('/proc/loadavg') as file:
             try:
                 t1, t5, t15, *_ = file.read().split()
                 values = map(float, [t1, t5, t15])
-                self._load_average = tuple(values)
+                return tuple(values)
             except (ValueError, TypeError):
                 raise SystemInfoError('Cannot parse /proc/loadavg file')
 
     @property
     def load_average(self):
-        """Returns load average over 1, 5, and 15 minutes."""
+        """:obj:`tuple` of :obj:`float`: Returns load average over 1, 5, and 15 minutes."""
         return self._load_average
 
     @property
     def load_average_as_string(self):
-        """Returns load average as a formatted string 'x.xx x.xx x.xx'."""
+        """:obj:`str`:Returns load average as a formatted string 'x.xx x.xx x.xx'."""
         return f"{self._load_average[0]} {self._load_average[1]} {self._load_average[2]}"
