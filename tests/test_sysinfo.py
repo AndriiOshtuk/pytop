@@ -1,5 +1,5 @@
 from unittest.mock import patch, mock_open
-from src.sysinfo import Cpu, SystemInfoError, LoadAverage, Uptime
+from src.sysinfo import Cpu, SystemInfoError, LoadAverage, Uptime, MemInfo
 import pytest
 
 
@@ -173,3 +173,46 @@ class TestUptime:
             uptime = Uptime()
             assert uptime.uptime_as_string == expected
             mock_file.assert_called_with("/proc/uptime")
+
+
+class TestMemInfo:
+
+    result_vs_files = [
+        ((7779304, 5316848, 2097148, 1944256), 'tests/test_sysinfo/041_meminfo'),
+        ((16777216, 6803696, 6291456, 0), 'tests/test_sysinfo/042_meminfo'),
+        ((16777216, 14583000, 6291456, 6291456), 'tests/test_sysinfo/043_meminfo'),
+    ]
+
+    # TODO(AOS) Modify files names
+    wrong_format_files = [
+        'tests/test_sysinfo/045_meminfo_wrong_format',
+        'tests/test_sysinfo/046_meminfo_wrong_format',
+        'tests/test_sysinfo/047_meminfo_wrong_format',
+        'tests/test_sysinfo/048_meminfo_wrong_format',
+    ]
+
+    def test_no_file(self):
+        with pytest.raises(OSError):
+            with patch('builtins.open') as mock_open:
+                mock_open.side_effect = OSError
+                uptime = MemInfo()
+
+    @pytest.mark.parametrize('filename', wrong_format_files)
+    def test_wrong_format(self, read_file, filename):
+        data = read_file(filename)
+        with pytest.raises(SystemInfoError) as ex:
+            with patch("builtins.open", mock_open(read_data=data)) as mock_file:
+                memory = MemInfo()
+
+        assert str(ex.value) == 'Cannot parse /proc/meminfo file'
+
+    @pytest.mark.parametrize('expected, filename', result_vs_files)
+    def test_memory_info(self, read_file, expected, filename):
+        data = read_file(filename)
+        with patch("builtins.open", mock_open(read_data=data)) as mock_file:
+            memory = MemInfo()
+            assert memory.total_memory == expected[0]
+            assert memory.used_memory == expected[1]
+            assert memory.total_swap == expected[2]
+            assert memory.used_swap == expected[3]
+            mock_file.assert_called_with("/proc/meminfo")

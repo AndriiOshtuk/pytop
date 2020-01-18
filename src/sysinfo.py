@@ -172,3 +172,84 @@ class Uptime:
         """:obj:`str`: Returns uptime as a formatted string 'dd hh:mm:ss'"""
         uptime = timedelta(seconds=self._uptime)
         return f"{uptime}"
+
+
+class MemInfo:
+    """
+    Information about memory usage, both physical and swap.
+
+    Class retrieves statistics about memory usage on the system and provides public
+    properties for easy access to the amount of free and used memory (both physical and swap).
+
+    Attributes:
+        update(): Retrieves actual memory statistics from /proc/meminfo.
+        total_memory(): Returns total amount of RAM space available.
+        used_memory(): Returns amount of RAM space that is currently used.
+        total_swap(): Returns total amount of swap space available.
+        used_swap(): Returns amount of swap space that is currently used.
+
+    .. PROC(5)
+        http://man7.org/linux/man-pages/man5/proc.5.html
+    """
+    def __init__(self):
+        self._total_memory = None
+        self._used_memory = None
+        self._total_swap = None
+        self._used_swap = None
+        self.update()
+
+    def update(self):
+        """Retrieves actual memory information from /proc/meminfo.
+
+        .. Stackoverflow htop author explanation
+            https://stackoverflow.com/a/41251290
+        """
+        info = MemInfo._read_file()
+
+        try:
+            self._total_memory = info['MemTotal']
+            # See link for calculation explanation
+            used_memory = info['MemTotal'] - info['MemFree'] - info['Buffers'] - info['Cached'] - \
+                          info['SReclaimable'] + info['Shmem']
+            self._used_memory = used_memory
+            self._total_swap = info['SwapTotal']
+            self._used_swap = info['SwapTotal'] - info['SwapFree']
+        except KeyError:
+            raise SystemInfoError('Cannot parse /proc/meminfo file')
+
+    @property
+    def total_memory(self):
+        """:obj:'int': Returns total amount of RAM space available."""
+        return self._total_memory
+
+    @property
+    def used_memory(self):
+        """:obj:'int': Returns amount of RAM space that is currently used."""
+        return self._used_memory
+
+    @property
+    def total_swap(self):
+        """:obj:'int': Returns total amount of swap space available."""
+        return self._total_swap
+
+    @property
+    def used_swap(self):
+        """:obj:'int': Returns amount of swap space that is currently used."""
+        return self._used_swap
+
+    @staticmethod
+    def _read_file():
+        meaningful_fields = ['MemTotal', 'MemFree', 'Buffers', 'Cached', 'SReclaimable',
+                             'Shmem', 'SwapTotal', 'SwapFree']
+        values = {}
+        with open('/proc/meminfo') as file:
+            for line in file:
+                try:
+                    field, value, *unit = line.split()
+                    name = field[:-1]
+                    if name in meaningful_fields:
+                        values[name] = int(value)
+                except (IndexError, ValueError, TypeError):
+                    raise SystemInfoError('Cannot parse /proc/meminfo file')
+
+        return values
