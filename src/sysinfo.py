@@ -9,6 +9,7 @@ __version__ = '1.0.0'
 
 from collections import namedtuple
 from datetime import timedelta
+import os
 
 
 class SystemInfoError(Exception):
@@ -253,3 +254,38 @@ class MemInfo:
                     raise SystemInfoError('Cannot parse /proc/meminfo file')
 
         return values
+
+class Process:
+
+    _proc_folder = '/proc'
+    _clock_ticks_per_second = os.sysconf(os.sysconf_names['SC_CLK_TCK'])
+
+    def __init__(self, pid):
+        self._pid = pid
+        self._user = None
+        self._priority = None
+        self._niceness = None
+        self._virtual_memory = 0.0
+        self._resident_memory = 0.0
+        self._shared_memory = 0.0
+        self._state = None
+        self._cpu_usage = 0.0
+        self._memory_usage = 0.0
+        self._time = 0.0
+        self._command = ''
+
+        self._is_kthread = False
+        self.update()
+
+    def update(self):
+        self.read_cmdline()
+
+    def read_cmdline(self):
+        """ Returns the command that originally started the process (content of /proc/PID/cmdline) """
+        filename = f'/proc/{self._pid}/cmdline'
+        with open(filename, 'r') as file:
+            self._command = file.read()
+
+    @property
+    def command(self):
+        return self._command
