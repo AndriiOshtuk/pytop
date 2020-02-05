@@ -10,6 +10,7 @@ __version__ = '1.0.0'
 from collections import namedtuple
 from datetime import timedelta
 import os
+import pwd
 
 
 class SystemInfoError(Exception):
@@ -121,6 +122,7 @@ class LoadAverage:
             except (ValueError, TypeError):
                 raise SystemInfoError('Cannot parse /proc/loadavg file')
 
+    # TODO(AOS): change load_average to field from property
     @property
     def load_average(self):
         """:obj:`tuple` of :obj:`float`: Returns load average over 1, 5, and 15 minutes."""
@@ -259,33 +261,123 @@ class Process:
 
     _proc_folder = '/proc'
     _clock_ticks_per_second = os.sysconf(os.sysconf_names['SC_CLK_TCK'])
+    _uptime = None
+    _total_memory = None
 
     def __init__(self, pid):
-        self._pid = pid
-        self._user = None
-        self._priority = None
-        self._niceness = None
-        self._virtual_memory = 0.0
-        self._resident_memory = 0.0
-        self._shared_memory = 0.0
-        self._state = None
-        self._cpu_usage = 0.0
-        self._memory_usage = 0.0
+        self.pid = pid
+        self.user = None
+        self.priority = None
+        self.niceness = None
+        self.virtual_memory = 0  # memory must be initialized with 0
+        self.resident_memory = 0
+        self.shared_memory = 0
+        self.state = None
+        self.cpu_usage = 0.0
+        self.memory_usage = 0.0
         self._time = 0.0
-        self._command = ''
+        self.command = ''
 
-        self._is_kthread = False
+        self._is_kthread = False # TODO(AOS) What for?
         self.update()
 
     def update(self):
-        self.read_cmdline()
+        self._read_cmdline()
+        self._read_stat()
+        self._read_status()
 
-    def read_cmdline(self):
+    def _read_cmdline(self):
         """ Returns the command that originally started the process (content of /proc/PID/cmdline) """
-        filename = f'/proc/{self._pid}/cmdline'
+        filename = f'{Process._proc_folder}/{self.pid}/cmdline'
         with open(filename, 'r') as file:
-            self._command = file.read()
+            self.command = Process.remove_whitespaces(file.read())
+
+    def _read_stat(self):
+        PF_KTHREAD = 0x00200000  # TODO(AOS) Redo
+
+        filename = f'{Process._proc_folder}/{self.pid}/stat'
+        with open(filename, 'r') as file:
+            values = ['Reserved']
+            values += file.read().split()
+
+            if not self.command:
+                self.command = Process.remove_whitespaces(values[2][1:-1])
+
+            self._is_kthread = True if int(values[9]) & PF_KTHREAD else False
+            self.priority = values[18]
+            self.niceness = values[19]
+            total_time_ticks = int(values[14]) + int(values[15]) + int(values[16]) + int(values[17])
+            start_time_ticks = int(values[22])
+            process_time_ticks = int(values[14]) + int(values[15])
+
+            seconds = Process._uptime - start_time_ticks / self._clock_ticks_per_second
+            self.cpu_usage = 100 * ((total_time_ticks / self._clock_ticks_per_second) / seconds)
+
+            self._time = format(process_time_ticks / self._clock_ticks_per_second, '.2f')  # TODO(AOS) Add proper format as HH:SS.XX
+
+    def _read_status(self):  # TODO(AOS) Add user_name
+        """ Returns the tuple (process_state, process_virtmemory)  (content of /proc/PID/status) """  # TODO(AOS) Add user_name
+        filename = f'{Process._proc_folder}/{self.pid}/status'
+
+        with open(filename, 'r') as file:
+            for line in file:
+                if not self.command and 'Name' in line:
+                    self.command = line.split()[1]
+                if 'State:' in line:
+                    self.state = line.split()[1]
+                elif 'Uid:' in line:
+                    user_id = line.split()[1]  # TODO(AOS) figure out whatever to use real or effective UID
+                    # self.user = pwd.getpwuid(int(user_id)).pw_name # TODO(AOS) Pycharm creates local environment where there are no other user
+                elif 'VmSize:' in line:
+                    self.virtual_memory = int(line.split()[1])
+                elif 'VmRSS:' in line:
+                    self.resident_memory = int(line.split()[1])
+                elif 'RssShmem:' in line:
+                    self.shared_memory = int(line.split()[1])
+
+        # TODO(AOS) Uncomment!!!!
+        # if self._resident_memory != ' ':
+        #     self._memory_usage = int(self._resident_memory) * 100 / int(Process.memory_info.total_memory)
+        # else:
+        #     self._memory_usage = ' '
 
     @property
-    def command(self):
-        return self._command
+    def time(self):
+        # return str(timedelta(seconds=float(self.__time)))
+
+        d = timedelta(seconds=float(self._time))
+
+        hours, remainder = divmod(d.total_seconds(), 3600)
+        minutes, seconds = divmod(remainder, 60)
+
+        if hours > 0.0:
+            return '%dh%d:%d' % (int(hours), int(minutes), int(seconds))
+        else:
+            return '%.0f:%4.2f' % (minutes, seconds)
+
+    @staticmethod
+    def set_uptime(callable):
+        Process._uptime = callable
+
+    @staticmethod
+    def set_memory_info(total_memory):
+        Process._total_memory = total_memory
+
+    @staticmethod
+    def remove_whitespaces(string):
+        return string.replace('\x00', ' ').rstrip()
+
+
+class Utility:
+
+    @staticmethod
+    def kb_to_xb(kb):
+        if not isinstance(kb, int):
+            raise TypeError
+
+        if kb < 100 * 1024:
+            return f'{kb}'
+        elif kb < 1024 * 1024:
+            return f'{kb // 1024}M'
+        else:
+            return f'{kb // (1024 * 1024)}G'
