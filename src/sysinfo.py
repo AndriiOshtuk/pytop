@@ -278,6 +278,9 @@ class Process:
         self._time = 0.0
         self.command = ''
 
+        self._time_ticks_old = None
+        self._uptime_old = None
+
         self._is_kthread = False # TODO(AOS) What for?
         self.update()
 
@@ -306,14 +309,26 @@ class Process:
             self._is_kthread = True if int(values[9]) & PF_KTHREAD else False
             self.priority = values[18]
             self.niceness = values[19]
-            total_time_ticks = int(values[14]) + int(values[15]) + int(values[16]) + int(values[17])
-            start_time_ticks = int(values[22])
+
+            time_ticks = sum(map(int, values[14:18]))
+            uptime = Process._uptime.uptime
+
+            if self._time_ticks_old is None:
+                self._time_ticks_old = time_ticks
+            if self._uptime_old is None:
+                self._uptime_old = uptime
+
+            seconds = uptime - self._uptime_old
+            if seconds <= 0:
+                self.cpu_usage = 0.0
+            else:
+                ticks_diff = time_ticks - self._time_ticks_old
+                self.cpu_usage = 100 * ((ticks_diff / self._clock_ticks_per_second) / seconds)
+            self._time_ticks_old = time_ticks
+            self._uptime_old = uptime
+
             process_time_ticks = int(values[14]) + int(values[15])
-
-            seconds = Process._uptime - start_time_ticks / self._clock_ticks_per_second
-            self.cpu_usage = 100 * ((total_time_ticks / self._clock_ticks_per_second) / seconds)
-
-            self._time = format(process_time_ticks / self._clock_ticks_per_second, '.2f')  # TODO(AOS) Add proper format as HH:SS.XX
+            self._time = process_time_ticks / self._clock_ticks_per_second
 
     def _read_status(self):  # TODO(AOS) Add user_name
         """ Returns the tuple (process_state, process_virtmemory)  (content of /proc/PID/status) """  # TODO(AOS) Add user_name
@@ -335,16 +350,11 @@ class Process:
                 elif 'RssShmem:' in line:
                     self.shared_memory = int(line.split()[1])
 
-        # TODO(AOS) Uncomment!!!!
-        # if self._resident_memory != ' ':
-        #     self._memory_usage = int(self._resident_memory) * 100 / int(Process.memory_info.total_memory)
-        # else:
-        #     self._memory_usage = ' '
+        memory_usage = self.resident_memory * 100 / Process._total_memory
+        self.memory_usage = round(memory_usage, 1)
 
     @property
     def time(self):
-        # return str(timedelta(seconds=float(self.__time)))
-
         d = timedelta(seconds=float(self._time))
 
         hours, remainder = divmod(d.total_seconds(), 3600)
@@ -353,11 +363,11 @@ class Process:
         if hours > 0.0:
             return '%dh%d:%d' % (int(hours), int(minutes), int(seconds))
         else:
-            return '%.0f:%4.2f' % (minutes, seconds)
+            return '%.0f:%05.2f' % (minutes, seconds)
 
     @staticmethod
-    def set_uptime(callable):
-        Process._uptime = callable
+    def set_uptime(obj):
+        Process._uptime = obj
 
     @staticmethod
     def set_memory_info(total_memory):

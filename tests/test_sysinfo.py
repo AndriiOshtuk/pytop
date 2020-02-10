@@ -222,8 +222,8 @@ class TestMemInfo:
 class TestProcess:
 
     process1 = {'pid':'1', 'user':'root', 'priority':'20', 'niceness':'0', 'virtual_memory':'220M',
-                'resident_memory':'3704', 'shared_memory':'3384', 'state':'S', 'cpu_usage':'0.0',
-                'memory_usage':'0.1', 'time':'0:14.76', 'command':'/sbin/init splash',
+                'resident_memory':'7779', 'shared_memory':'3384', 'state':'S', 'cpu_usage':'0.0',
+                'memory_usage':'0.1', 'time':'0:14.70', 'command':'/sbin/init splash',
     }
 
     process4 = {'pid': '4', 'user': 'root', 'priority': '0', 'niceness': '-20', 'virtual_memory': '0',
@@ -232,8 +232,8 @@ class TestProcess:
                 }
 
     process1051 = {'pid': '1051', 'user': 'test_user', 'priority': '11', 'niceness': '22', 'virtual_memory': '96G',
-                'resident_memory': '1000M', 'shared_memory': '13504', 'state': 'S', 'cpu_usage': '100.0',
-                'memory_usage': '100.0', 'time': '5h50.16', 'command': 'test comand line',
+                'resident_memory': '7G', 'shared_memory': '13504', 'state': 'S', 'cpu_usage': '100.0',
+                'memory_usage': '100.0', 'time': '0:14.70', 'command': 'test comand line',
                 }
 
     result_vs_pid = [
@@ -247,6 +247,12 @@ class TestProcess:
         401,
         402,
         # 403,
+    ]
+
+    cpu_vs_pid = [
+        ('1', 0.0),
+        ('4', 20.0),
+        ('1051', 100.0),
     ]
 
     @pytest.fixture(params=wrong_format_pid)
@@ -266,9 +272,21 @@ class TestProcess:
         Process._proc_folder = os.path.join(dir_path, 'test_sysinfo')
 
         uptime = Uptime()
-        Process.set_uptime(uptime.uptime)
+        Process.set_uptime(uptime)
+        memory_info = memory = MemInfo()
+        Process.set_memory_info(memory_info.total_memory)
         process = Process(pid)
         return expected, process
+
+    @pytest.fixture()
+    def get_uptime(self):
+        class SimUptime:
+            uptime = 115230
+
+            def add(self, value):
+                SimUptime.uptime += value
+
+        return SimUptime()
 
     # def test_no_file(self):
     #     with pytest.raises(OSError):
@@ -316,13 +334,26 @@ class TestProcess:
         expected, actual = get_process
         assert actual.state == expected['state']
 
-    def test_cpu_usage(self, get_process):
-        expected, actual = get_process
-        assert str(actual.cpu_usage) == expected['cpu_usage']
+    @pytest.mark.parametrize('pid, expected', cpu_vs_pid)
+    def test_cpu_usage(self, pid, expected , get_uptime):
+        dir_path = os.path.dirname(os.path.realpath(__file__))
+
+        # first, get init values
+        Process._proc_folder = os.path.join(dir_path, 'test_sysinfo')
+        Process.set_uptime(get_uptime)
+        process = Process(pid)
+
+        # then, subsititute uptime and proc folder
+        if expected:
+            get_uptime.add(10)
+        Process._proc_folder = os.path.join(dir_path, 'test_sysinfo', 'cpu')
+        process.update()
+
+        assert process.cpu_usage == expected
 
     def test_memory_usage(self, get_process):
         expected, actual = get_process
-        assert actual.memory_usage == expected['memory_usage']
+        assert actual.memory_usage == float(expected['memory_usage'])
 
     def test_time(self, get_process):
         expected, actual = get_process
