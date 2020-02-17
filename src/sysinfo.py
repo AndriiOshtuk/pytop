@@ -257,7 +257,39 @@ class MemInfo:
 
         return values
 
+
 class Process:
+    """
+        Information about running process with PID.
+
+        Class retrieves all statistics (state, niceness, priority, user, time, memory and cpu usage)
+        for a running process and provides public properties for easy access.
+
+        Example:
+            >>> Process.set_uptime(obj) # requires object with uptime attribute holding actual uptime
+            >>> Process.set_memory_info(value) # requires to set memory size
+            >>> proc = Process(4)
+            >>> proc.pid, proc.priority, proc.niceness
+            (1, 20, 0)
+
+        Attributes:
+            update(): Retrieves actual process statistics from /proc/[pid]/ subdirectory.
+            pid: process PID
+            user: process user
+            priority: process kernel-space priority
+            niceness: process user-space niceness
+            virtual_memory: virtual memory requested by process
+            resident_memory: resident memory usage (currently being used)
+            shared_memory: shared memory used
+            state: process state
+            cpu_usage: percentage of CPU time process is currently using
+            memory_usage: task's current share of the phisical memory
+            time(): returns processor time used by process
+            command: command that launched process
+
+        .. PROC(5)
+            http://man7.org/linux/man-pages/man5/proc.5.html
+        """
 
     _proc_folder = '/proc'
     _clock_ticks_per_second = os.sysconf(os.sysconf_names['SC_CLK_TCK'])
@@ -281,23 +313,23 @@ class Process:
         self._time_ticks_old = None
         self._uptime_old = None
 
-        self._is_kthread = False # TODO(AOS) What for?
+        self.kthread = False # TODO(AOS) What for?
         self.update()
 
     def update(self):
-        self._read_cmdline()
-        self._read_stat()
-        self._read_status()
+        try:
+            self._read_cmdline()
+            self._read_stat()
+            self._read_status()
+        except (ValueError, IndexError):
+            raise SystemInfoError('Error while parsing /proc/[pid]/ subdirectory')
 
     def _read_cmdline(self):
-        """ Returns the command that originally started the process (content of /proc/PID/cmdline) """
         filename = f'{Process._proc_folder}/{self.pid}/cmdline'
         with open(filename, 'r') as file:
             self.command = Process.remove_whitespaces(file.read())
 
     def _read_stat(self):
-        PF_KTHREAD = 0x00200000  # TODO(AOS) Redo
-
         filename = f'{Process._proc_folder}/{self.pid}/stat'
         with open(filename, 'r') as file:
             values = ['Reserved']
@@ -306,7 +338,7 @@ class Process:
             if not self.command:
                 self.command = Process.remove_whitespaces(values[2][1:-1])
 
-            self._is_kthread = True if int(values[9]) & PF_KTHREAD else False
+            self.kthread = True if int(values[9]) & 0x00200000 else False
             self.priority = values[18]
             self.niceness = values[19]
 
@@ -330,8 +362,7 @@ class Process:
             process_time_ticks = int(values[14]) + int(values[15])
             self._time = process_time_ticks / self._clock_ticks_per_second
 
-    def _read_status(self):  # TODO(AOS) Add user_name
-        """ Returns the tuple (process_state, process_virtmemory)  (content of /proc/PID/status) """  # TODO(AOS) Add user_name
+    def _read_status(self):
         filename = f'{Process._proc_folder}/{self.pid}/status'
 
         with open(filename, 'r') as file:

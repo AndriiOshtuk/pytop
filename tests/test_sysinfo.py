@@ -261,11 +261,15 @@ class TestProcess:
         pid = request.param
         dir_path = os.path.dirname(os.path.realpath(__file__))
         Process._proc_folder = os.path.join(dir_path, 'test_sysinfo')
+
+        uptime = Uptime()
+        Process.set_uptime(uptime)
+        memory_info = memory = MemInfo()
+        Process.set_memory_info(memory_info.total_memory)
         process = Process(pid)
         return process
 
     @pytest.fixture(params=result_vs_pid)
-    # @pytest.mark.parametrize('expected, pid', result_vs_pid)
     def get_process(self, request):
         expected, pid = request.param
         dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -288,24 +292,33 @@ class TestProcess:
 
         return SimUptime()
 
-    # def test_no_file(self):
-    #     with pytest.raises(OSError):
-    #         Process._proc_folder = os.path.dirname(os.path.realpath(__file__))
-    #         process = Process(1)
-    #
-    # def test_no_folder(self):
-    #     with pytest.raises(OSError):
-    #         Process._proc_folder = '/homehome'
-    #         process = Process(1)
-    #
-    # def test_wrong_format(self, get_process_wrong_format):
-    #     with pytest.raises(SystemInfoError) as ex:
-    #         get_process_wrong_format()
+    def test_no_file(self):
+        with pytest.raises(OSError):
+            Process._proc_folder = os.path.dirname(os.path.realpath(__file__))
+            process = Process(1)
+
+    def test_no_folder(self):
+        with pytest.raises(OSError):
+            Process._proc_folder = '/homehome'
+            process = Process(1)
+
+    @pytest.mark.parametrize('pid', wrong_format_pid)
+    def test_wrong_format(self, pid):
+        dir_path = os.path.dirname(os.path.realpath(__file__))
+        Process._proc_folder = os.path.join(dir_path, 'test_sysinfo')
+        uptime = Uptime()
+        Process.set_uptime(uptime)
+        memory_info = memory = MemInfo()
+        Process.set_memory_info(memory_info.total_memory)
+
+        with pytest.raises(SystemInfoError) as ex:
+            process = Process(pid)
 
     def test_pid(self, get_process):
         expected, actual = get_process
         assert actual.pid == expected['pid']
 
+    @pytest.mark.skip
     def test_user(self, get_process):
         expected, actual = get_process
         assert actual.user == expected['user']
