@@ -317,6 +317,7 @@ class Process:
         self.update()
 
     def update(self):
+        """Retrieves actual process statistics from /proc/[pid]/ subdirectory."""
         try:
             self._read_cmdline()
             self._read_stat()
@@ -405,12 +406,12 @@ class Process:
 
     @staticmethod
     def set_uptime(obj):
-        "Process class requires object with uptime attribute holding actual uptime"
+        """Process class requires object with uptime attribute holding actual uptime"""
         Process._uptime = obj
 
     @staticmethod
     def set_memory_info(total_memory):
-        "Process class requires to know total RAM size (int value)"
+        """Process class requires to know total RAM size (int value)"""
         Process._total_memory = total_memory
 
     @staticmethod
@@ -418,10 +419,61 @@ class Process:
         return string.replace('\x00', ' ').rstrip()
 
 
+class ProcessesController:
+    _proc_folder = '/proc/'
+
+    def __init__(self, uptime, memory):
+        self._processes = set()
+        self._previous_procceses = set()
+        Process.set_uptime(uptime)
+        Process.set_memory_info(memory)
+        self.update()
+
+    def update(self):
+        folder = os.listdir(ProcessesController._proc_folder)
+        t = os.path.isdir(ProcessesController._proc_folder + folder[0])
+        g = ProcessesController._proc_folder + folder[0]
+        actual_processes = {name for name in os.listdir(ProcessesController._proc_folder)
+                            if os.path.isdir(ProcessesController._proc_folder + name) and name.isdigit()}
+
+        obsolete = self._previous_procceses - actual_processes
+        new = actual_processes - self._previous_procceses
+
+        for process in self._processes:
+            if process.name in obsolete:
+                del process
+        for pid in new:
+            self._processes.add(Process(pid))
+        self._previous_procceses = actual_processes
+
+    @property
+    def processes(self):
+        return self._processes
+
+    @property
+    def proccesses_number(self):
+        return len(self._processes)
+
+    @property
+    def processes_pid(self):
+        pid = []
+        for process in self._processes:
+            pid.append(int(process.pid))
+        return pid
+#
+# a = ProcessesController(None, None)
+
 class Utility:
+    """
+        Class provides utility methods.
+
+        Attributes:
+            kb_to_xb(): Converts memory size in kB into string representation.
+    """
 
     @staticmethod
     def kb_to_xb(kb):
+        """Converts memory size in kB into string representation."""
         if not isinstance(kb, int):
             raise TypeError
 

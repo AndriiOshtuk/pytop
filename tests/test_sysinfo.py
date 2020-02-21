@@ -1,5 +1,6 @@
+from unittest import TestCase
 from unittest.mock import patch, mock_open
-from src.sysinfo import Cpu, SystemInfoError, LoadAverage, Uptime, MemInfo, Process, Utility
+from src.sysinfo import Cpu, SystemInfoError, LoadAverage, Uptime, MemInfo, Process, Utility, ProcessesController
 import pytest
 import shutil
 import os
@@ -10,10 +11,11 @@ def read_file():
     def _read_file(name):
         with open(name) as f:
             return f.read()
+
     return _read_file
 
-class TestCpu:
 
+class TestCpu:
     usage_vs_files = [
         (0.0, 'tests/test_sysinfo/010_proc_stat_usage_0_pct'),
         (25.0, 'tests/test_sysinfo/011_proc_stat_usage_25_pct'),
@@ -122,7 +124,6 @@ class TestLoadAverage:
 
 
 class TestUptime:
-
     # TODO(AOS) Create test data files in fixture instead of static files
 
     result_vs_files = [
@@ -178,7 +179,6 @@ class TestUptime:
 
 
 class TestMemInfo:
-
     result_vs_files = [
         ((7779304, 5316848, 2097148, 1944256), 'tests/test_sysinfo/041_meminfo'),
         ((16777216, 6803696, 6291456, 0), 'tests/test_sysinfo/042_meminfo'),
@@ -220,11 +220,10 @@ class TestMemInfo:
 
 
 class TestProcess:
-
-    process1 = {'pid':'1', 'user':'root', 'priority':'20', 'niceness':'0', 'virtual_memory':'220M',
-                'resident_memory':'7779', 'shared_memory':'3384', 'state':'S', 'cpu_usage':'0.0',
-                'memory_usage':'0.1', 'time':'0:14.70', 'command':'/sbin/init splash',
-    }
+    process1 = {'pid': '1', 'user': 'root', 'priority': '20', 'niceness': '0', 'virtual_memory': '220M',
+                'resident_memory': '7779', 'shared_memory': '3384', 'state': 'S', 'cpu_usage': '0.0',
+                'memory_usage': '0.1', 'time': '0:14.70', 'command': '/sbin/init splash',
+                }
 
     process4 = {'pid': '4', 'user': 'root', 'priority': '0', 'niceness': '-20', 'virtual_memory': '0',
                 'resident_memory': '0', 'shared_memory': '0', 'state': 'I', 'cpu_usage': '0.0',
@@ -232,9 +231,9 @@ class TestProcess:
                 }
 
     process1051 = {'pid': '1051', 'user': 'test_user', 'priority': '11', 'niceness': '22', 'virtual_memory': '96G',
-                'resident_memory': '7G', 'shared_memory': '13504', 'state': 'S', 'cpu_usage': '100.0',
-                'memory_usage': '100.0', 'time': '0:14.70', 'command': 'test comand line',
-                }
+                   'resident_memory': '7G', 'shared_memory': '13504', 'state': 'S', 'cpu_usage': '100.0',
+                   'memory_usage': '100.0', 'time': '0:14.70', 'command': 'test comand line',
+                   }
 
     result_vs_pid = [
         (process1, '1'),
@@ -348,7 +347,7 @@ class TestProcess:
         assert actual.state == expected['state']
 
     @pytest.mark.parametrize('pid, expected', cpu_vs_pid)
-    def test_cpu_usage(self, pid, expected , get_uptime):
+    def test_cpu_usage(self, pid, expected, get_uptime):
         dir_path = os.path.dirname(os.path.realpath(__file__))
 
         # first, get init values
@@ -376,3 +375,37 @@ class TestProcess:
         expected, actual = get_process
         print(actual.command)
         assert actual.command == expected['command']
+
+
+class TestUtility:
+    test_values = [
+        (0, '0'),
+        (1234, '1234'),
+        (139552, '136M'),
+        (803680, '784M'),
+        (118206636, '112G'),
+    ]
+
+    @pytest.mark.parametrize('input, expected', test_values)
+    def test_kb_to_xb(self, input, expected):
+        assert Utility.kb_to_xb(input) == expected
+
+
+class TestProcessesController:
+    folder_vs_processes = [
+        ('test_sysinfo/processes/01_processes/', [1, 2, 3]),
+        ('test_sysinfo/processes/02_processes/', [1, 2, 3, 15, 18]),
+        ('test_sysinfo/processes/03_processes/', [15, 18]),
+        ('test_sysinfo/processes/04_processes/', [15, 18, 23568]),
+    ]
+
+    @pytest.mark.parametrize('folder, expected', folder_vs_processes)
+    def test_1(self, folder, expected):
+        dir_path = os.path.dirname(os.path.realpath(__file__))
+        ProcessesController._proc_folder = os.path.join(dir_path, folder)
+        Process._proc_folder = os.path.join(dir_path, folder)
+
+        uptime = Uptime()
+        memory_info = memory = MemInfo()
+        processes = ProcessesController(uptime, memory_info.total_memory)
+        assert sorted(processes.processes_pid) == sorted(expected)
