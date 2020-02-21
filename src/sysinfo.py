@@ -327,7 +327,7 @@ class Process:
     def _read_cmdline(self):
         filename = f'{Process._proc_folder}/{self.pid}/cmdline'
         with open(filename, 'r') as file:
-            self.command = Process.remove_whitespaces(file.read())
+            self.command = Process._remove_whitespaces(file.read())
 
     def _read_stat(self):
         filename = f'{Process._proc_folder}/{self.pid}/stat'
@@ -336,7 +336,7 @@ class Process:
             values += file.read().split()
 
             if not self.command:
-                self.command = Process.remove_whitespaces(values[2][1:-1])
+                self.command = Process._remove_whitespaces(values[2][1:-1])
 
             self.kthread = True if int(values[9]) & 0x00200000 else False
             self.priority = values[18]
@@ -364,28 +364,35 @@ class Process:
 
     def _read_status(self):
         filename = f'{Process._proc_folder}/{self.pid}/status'
+        status = {}
 
         with open(filename, 'r') as file:
             for line in file:
-                if not self.command and 'Name' in line:
-                    self.command = line.split()[1]
-                if 'State:' in line:
-                    self.state = line.split()[1]
-                elif 'Uid:' in line:
-                    user_id = line.split()[1]  # TODO(AOS) figure out whatever to use real or effective UID
-                    # self.user = pwd.getpwuid(int(user_id)).pw_name # TODO(AOS) Pycharm creates local environment where there are no other user
-                elif 'VmSize:' in line:
-                    self.virtual_memory = int(line.split()[1])
-                elif 'VmRSS:' in line:
-                    self.resident_memory = int(line.split()[1])
-                elif 'RssShmem:' in line:
-                    self.shared_memory = int(line.split()[1])
+                temp = line.split()
+                name = temp[0][:-1]
+                if name in ('Name', 'State'):
+                     status[name] = temp[1]
+                if name in ('Uid', 'VmSize', 'VmRSS', 'RssShmem'):
+                    status[name] = int(temp[1])
+
+            # mandatory properties raise exception
+            if not self.command:
+                self.command = status['Name']
+            self.state = status['State']
+            user_id = status['Uid']
+            # self.user = pwd.getpwuid( int(user_id)).pw_name  # TODO(AOS) Pycharm creates local environment where there are no other user
+
+            # optional properties
+            self.virtual_memory = status.get('VmSize', 0)
+            self.resident_memory = status.get('VmRSS', 0)
+            self.shared_memory = status.get('RssShmem', 0)
 
         memory_usage = self.resident_memory * 100 / Process._total_memory
         self.memory_usage = round(memory_usage, 1)
 
     @property
     def time(self):
+        """:obj:'str': Returns processor time used by process."""
         d = timedelta(seconds=float(self._time))
 
         hours, remainder = divmod(d.total_seconds(), 3600)
@@ -398,14 +405,16 @@ class Process:
 
     @staticmethod
     def set_uptime(obj):
+        "Process class requires object with uptime attribute holding actual uptime"
         Process._uptime = obj
 
     @staticmethod
     def set_memory_info(total_memory):
+        "Process class requires to know total RAM size (int value)"
         Process._total_memory = total_memory
 
     @staticmethod
-    def remove_whitespaces(string):
+    def _remove_whitespaces(string):
         return string.replace('\x00', ' ').rstrip()
 
 
