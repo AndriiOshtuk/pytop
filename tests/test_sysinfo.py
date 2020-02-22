@@ -406,7 +406,7 @@ class TestProcessesController:
         Process._proc_folder = os.path.join(dir_path, folder)
 
         uptime = Uptime()
-        memory_info = memory = MemInfo()
+        memory_info = MemInfo()
         processes = ProcessesController(uptime, memory_info.total_memory)
         assert sorted(processes.processes_pid) == sorted(expected)
 
@@ -417,6 +417,6 @@ class TestProcessesController:
         Process._proc_folder = os.path.join(dir_path, folder)
 
         uptime = Uptime()
-        memory_info = memory = MemInfo()
+        memory_info = MemInfo()
         processes = ProcessesController(uptime, memory_info.total_memory)
         assert processes.proccesses_number == len(expected)
