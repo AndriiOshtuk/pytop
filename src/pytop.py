@@ -9,6 +9,7 @@ __version__ = '1.0.0'
 
 import urwid
 import argparse
+import sys
 
 from sysinfo import Cpu, MemInfo, Uptime, LoadAverage, ProcessesController, Utility
 
@@ -23,7 +24,12 @@ def parse_args():
 
 
 class CpuAndMemoryPanel(urwid.WidgetWrap):
-    """docstring for CpuAndMemoryPanel"""
+    """A pile of widgets (CPU usage, memory and swap usage) stacked vertically from top to bottom
+
+        Args:
+            cpu (:obj:'Cpu'): Object that return list of % usage for each CPU.
+            memory (:obj:'MemInfo'): Object that return lmemory usage.
+    """
 
     def __init__(self, cpu, memory):
         self.cpu = cpu
@@ -31,21 +37,23 @@ class CpuAndMemoryPanel(urwid.WidgetWrap):
         self.widgets = []
 
         for i, value in enumerate(self.cpu.cpu_usage):
-            self.widgets.append(urwid.Text(self.cpu_progress_markup(i + 1, 0.0)))
+            self.widgets.append(urwid.Text(self.cpu_markup(i + 1, 0.0)))
+        self.widgets.append(urwid.Text(self.memory_markup('Mem', 0, 0)))
+        self.widgets.append(urwid.Text(self.memory_markup('Swp', 0, 0)))
 
-        self.widgets.append(urwid.Text(self.mem_usage_markup('Mem', 0, 0)))
-        self.widgets.append(urwid.Text(self.mem_usage_markup('Swp', 0, 0)))
-        self.panel = urwid.Pile(self.widgets)
-        urwid.WidgetWrap.__init__(self, self.panel)
+        panel = urwid.Pile(self.widgets)
+        urwid.WidgetWrap.__init__(self, panel)
 
     def refresh(self):
+        """Update content of widget with actual data."""
         for i, value in enumerate(self.cpu.cpu_usage):
-            self.widgets[i].set_text(self.cpu_progress_markup(i + 1, value))
+            self.widgets[i].set_text(self.cpu_markup(i + 1, value))
 
-        self.widgets[-2].set_text(self.mem_usage_markup('Mem', self.memory.used_memory, self.memory.total_memory))
-        self.widgets[-1].set_text(self.mem_usage_markup('Swp', self.memory.used_swap, self.memory.total_swap))
+        self.widgets[-2].set_text(self.memory_markup('Mem', self.memory.used_memory, self.memory.total_memory))
+        self.widgets[-1].set_text(self.memory_markup('Swp', self.memory.used_swap, self.memory.total_swap))
 
-    def cpu_progress_markup(self, index, percent, width=29):
+    def cpu_markup(self, index, percent, width=29):
+        """Returns text markup for Text widget with CPU info"""
         pct = "%4.1f" % percent
         bars = int(percent * width / 100)
         fill = width - bars
@@ -58,9 +66,10 @@ class CpuAndMemoryPanel(urwid.WidgetWrap):
             ('progress_bracket', u']')
         ]
 
-    def mem_usage_markup(self, txt, used, total, width=24):
-        used_mem = Utility.kb_to_xb(used)
-        total_mem = Utility.kb_to_xb(total)
+    def memory_markup(self, txt, used, total, width=24):
+        """Returns text markup for Text widget with memory info"""
+        used_mem = CpuAndMemoryPanel.format_memory(used)
+        total_mem = CpuAndMemoryPanel.format_memory(total)
 
         if total > 0:
             bars = int(used * width / total)
@@ -74,9 +83,20 @@ class CpuAndMemoryPanel(urwid.WidgetWrap):
             ('progress_bracket', u'['),
             ('progress_bar', u'|' * bars),
             ('progress_bar', u' ' * fill),
-            ('cpu_pct', u'%4.4s/%4.4s' % (used_mem, total_mem)),
+            ('cpu_pct', u'%5.5s/%5.5s' % (used_mem, total_mem)),
             ('progress_bracket', u']')
         ]
+
+    @staticmethod
+    def format_memory(value):
+        """Return value as formatted string."""
+        if value < 1024:
+            result = '%4.4s%c' % (value, 'K')
+        elif value < 1024*1024:
+            result = '%4.4s%c' % (value/1024, 'M')
+        elif value < 1024*1024*1024:
+            result = '%4.4s%c' % (value/(1024*1024), 'G')
+        return result
 
 
 class RightPanel(urwid.WidgetWrap):
