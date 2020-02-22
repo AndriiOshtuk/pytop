@@ -420,6 +420,7 @@ class Process:
 
 
 class ProcessesController:
+    # TODO(AOS) Add docstrings
     _proc_folder = '/proc/'
 
     def __init__(self, uptime, memory):
@@ -430,9 +431,6 @@ class ProcessesController:
         self.update()
 
     def update(self):
-        folder = os.listdir(ProcessesController._proc_folder)
-        t = os.path.isdir(ProcessesController._proc_folder + folder[0])
-        g = ProcessesController._proc_folder + folder[0]
         actual_processes = {name for name in os.listdir(ProcessesController._proc_folder)
                             if os.path.isdir(ProcessesController._proc_folder + name) and name.isdigit()}
 
@@ -456,12 +454,8 @@ class ProcessesController:
 
     @property
     def processes_pid(self):
-        pid = []
-        for process in self._processes:
-            pid.append(int(process.pid))
-        return pid
-#
-# a = ProcessesController(None, None)
+        return [int(process.pid) for process in self._processes]
+
 
 class Utility:
     """
