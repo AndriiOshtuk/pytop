@@ -10,7 +10,7 @@ __version__ = '1.0.0'
 import urwid
 import argparse
 
-from src.sysinfo import Cpu, MemInfo, Uptime, LoadAverage, ProcessesController
+from sysinfo import Cpu, MemInfo, Uptime, LoadAverage, ProcessesController, Utility
 
 
 def parse_args():
@@ -20,6 +20,124 @@ def parse_args():
                            version='%(prog)s ' + __version__ + ' - ' + __copyright__)
 
     return argparser.parse_args()
+
+
+class CpuAndMemoryPanel(urwid.WidgetWrap):
+    """docstring for CpuAndMemoryPanel"""
+
+    def __init__(self, cpu, memory):
+        self.cpu = cpu
+        self.memory = memory
+        self.widgets = []
+
+        for i, value in enumerate(self.cpu.cpu_usage):
+            self.widgets.append(urwid.Text(self.cpu_progress_markup(i + 1, 0.0)))
+
+        self.widgets.append(urwid.Text(self.mem_usage_markup('Mem', 0, 0)))
+        self.widgets.append(urwid.Text(self.mem_usage_markup('Swp', 0, 0)))
+        self.panel = urwid.Pile(self.widgets)
+        urwid.WidgetWrap.__init__(self, self.panel)
+
+    def refresh(self):
+        for i, value in enumerate(self.cpu.cpu_usage):
+            self.widgets[i].set_text(self.cpu_progress_markup(i + 1, value))
+
+        self.widgets[-2].set_text(self.mem_usage_markup('Mem', self.memory.used_memory, self.memory.total_memory))
+        self.widgets[-1].set_text(self.mem_usage_markup('Swp', self.memory.used_swap, self.memory.total_swap))
+
+    def cpu_progress_markup(self, index, percent, width=29):
+        pct = "%4.1f" % percent
+        bars = int(percent * width / 100)
+        fill = width - bars
+        return [
+            ('fields_names', u'%-3.2s' % index),
+            ('progress_bracket', u'['),
+            ('progress_bar', u'|' * bars),
+            ('progress_bar', u' ' * fill),
+            ('cpu_pct', u'%5.5s%%' % pct),
+            ('progress_bracket', u']')
+        ]
+
+    def mem_usage_markup(self, txt, used, total, width=24):
+        used_mem = Utility.kb_to_xb(used)
+        total_mem = Utility.kb_to_xb(total)
+
+        if total > 0:
+            bars = int(used * width / total)
+        else:
+            bars = 0
+
+        fill = width - bars
+
+        return [
+            ('fields_names', txt),
+            ('progress_bracket', u'['),
+            ('progress_bar', u'|' * bars),
+            ('progress_bar', u' ' * fill),
+            ('cpu_pct', u'%4.4s/%4.4s' % (used_mem, total_mem)),
+            ('progress_bracket', u']')
+        ]
+
+
+class RightPanel(urwid.WidgetWrap):
+    """docstring for RightPanel"""
+    def __init__(self, controller, uptime, load):
+        self.controller = controller
+        self.uptime = uptime
+        self.load = load
+        self.widgets = []
+
+        self.widgets.append(urwid.Text([('fields_names', u' Tasks:'), ' 0, 0 thr, 0 kthr; 0 running']))
+        self.widgets.append(urwid.Text([('fields_names', u' Load average:'), ' 0.0 0.0 0.0']))
+        self.widgets.append(urwid.Text([('fields_names', u' Uptime:'), ' -- /-- ']))
+
+        self.panel = urwid.Pile(self.widgets)
+        urwid.WidgetWrap.__init__(self, self.panel)
+
+    def refresh(self):
+        self.widgets[0].set_text([('fields_names', u' Tasks:'), f' {self.controller.proccesses_number}, 0 thr, 0 kthr; {self.controller.running_proccesses_number} running'])
+        self.widgets[1].set_text([('fields_names', u' Load average:'), self.load.load_average_as_string])
+        self.widgets[2].set_text([('fields_names', u' Uptime:'), self.uptime.uptime_as_string])
+
+
+class ProcessPanel(urwid.WidgetWrap):
+    """docstring for ProcessPanel"""
+    def __init__(self, controller):
+        self.controller = controller
+        self.header = urwid.Text(('table_header',u'  PID USER       PRI    NI VIRT   RES  SHR S  CPU%  MEM%      TIME+   Command'))
+
+        self.processes = []
+
+        for pr in self.controller.processes:
+            self.processes.append(urwid.Text(self.process_markup(pr)))
+
+        self.table_view = urwid.ListBox(urwid.SimpleFocusListWalker(self.processes))
+        self.table_widget = urwid.Frame(self.table_view, header=self.header)
+
+        urwid.WidgetWrap.__init__(self, self.table_widget)
+
+    def refresh(self):
+        self.processes = []
+
+        for pr in self.controller.processes:
+            self.processes.append(urwid.Text(self.process_markup(pr)))
+
+    def process_markup(self, pr):
+        priority = 'RT' if pr.priority == '-100' else pr.priority
+
+        result = []
+        result.append(('progress_bracket', u'%5.5s %-10.10s %4.4s' % (pr.pid, pr.user, priority)))
+
+        if int(pr.niceness) < 0:
+            result.append(('niceness', u' %4.4s' % pr.niceness))
+        else:
+            result.append(('progress_bracket', u' %4.4s' % pr.niceness))
+
+        result.append(('progress_bracket', u' %4.4sM %4.4s %4.4s %1.1s  %4.1f  %4.1f %8.18s %s'
+         % (pr.virtual_memory, pr.resident_memory, pr.shared_memory,
+            pr.state, pr.cpu_usage, pr.memory_usage, pr.time, pr.command[:20])))
+
+        return result
 
 
 class Application:
@@ -73,7 +191,7 @@ class Application:
         self.loop.set_alarm_in(1, self.refresh)
 
     def refresh(self, loop, data):
-        for i in self.data:
+        for i in self.refreshable_data:
             i.update()
 
         self.loop.set_alarm_in(1, self.refresh)
