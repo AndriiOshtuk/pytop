@@ -11,15 +11,6 @@ import argparse
 from pytop.sysinfo import Cpu, MemInfo, Uptime, LoadAverage, ProcessesController, Utility
 
 
-def parse_args():
-    """ Returns script options parsed from CLI arguments."""
-    argparser = argparse.ArgumentParser(prog='pytop')
-    argparser.add_argument('-v', '--version', action='version',
-                           version='%(prog)s ' + __version__ + ' - ' + __copyright__)
-
-    return argparser.parse_args()
-
-
 class CpuAndMemoryPanel(urwid.WidgetWrap):
     """A pile of widgets (CPU usage, memory and swap usage) stacked vertically from top to bottom
 
@@ -169,7 +160,14 @@ class Application:
         ('niceness', 'dark red', ''),
     ]
 
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        refresh_rate_sec,
+    ):
+        # options
+        self.refresh_rate_sec = refresh_rate_sec
+
         # initialize data sources
         self.cpu = Cpu()
         self.memory = MemInfo()
@@ -205,13 +203,13 @@ class Application:
                                     unhandled_input=self.handle_input
                                     )
 
-        self.loop.set_alarm_in(1, self.refresh)
+        self.loop.set_alarm_in(self.refresh_rate_sec, self.refresh)
 
     def refresh(self, loop, data):
         for i in self.refreshable_data:
             i.update()
 
-        self.loop.set_alarm_in(1, self.refresh)
+        self.loop.set_alarm_in(self.refresh_rate_sec, self.refresh)
         self.left_panel.refresh()
         self.right_panel.refresh()
         # TODO(AOS) Update self.processes_list
@@ -282,6 +280,20 @@ class Application:
 
 
 def main():
-    options = parse_args()
+    """ Returns script options parsed from CLI arguments."""
+    parser = argparse.ArgumentParser(prog='pytop')
+    parser.add_argument(
+        '-r', '--refresh_rate_sec', type=float, default=1.0,
+        help='Refresh rate (sec)',
+    )
+    parser.add_argument(
+        '-v', '--version', action='version',
+        version='%(prog)s ' + __version__ + ' - ' + __copyright__,
+    )
 
-    Application().start()
+    args = parser.parse_args()
+
+    app = Application(
+        refresh_rate_sec=args.refresh_rate_sec,
+    )
+    app.start()
