@@ -411,7 +411,7 @@ class TestProcessesController:
         assert sorted(processes.processes_pid) == sorted(expected)
 
     @pytest.mark.parametrize('folder, expected', folder_vs_processes)
-    def test_proccesses_number(self, folder, expected):
+    def test_processes_number(self, folder, expected):
         dir_path = os.path.dirname(os.path.realpath(__file__))
         ProcessesController._proc_folder = os.path.join(dir_path, folder)
         Process._proc_folder = os.path.join(dir_path, folder)
@@ -419,4 +419,4 @@ class TestProcessesController:
         uptime = Uptime()
         memory_info = MemInfo()
         processes = ProcessesController(uptime, memory_info.total_memory)
-        assert processes.proccesses_number == len(expected)
+        assert processes.processes_number == len(expected)
