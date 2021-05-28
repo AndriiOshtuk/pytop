@@ -431,14 +431,16 @@ class ProcessesController:
         self.update()
 
     def update(self):
-        actual_processes = {name for name in os.listdir(ProcessesController._proc_folder)
-                            if os.path.isdir(ProcessesController._proc_folder + name) and name.isdigit()}
+        actual_processes = {
+            pid for pid in os.listdir(ProcessesController._proc_folder)
+            if os.path.isdir(ProcessesController._proc_folder + pid) and pid.isdigit()
+        }
 
         obsolete = self._previous_procceses - actual_processes
         new = actual_processes - self._previous_procceses
 
         for process in self._processes:
-            if process.name in obsolete:
+            if process.pid in obsolete:
                 del process
         for pid in new:
             self._processes.add(Process(pid))
@@ -451,6 +453,11 @@ class ProcessesController:
     @property
     def proccesses_number(self):
         return len(self._processes)
+
+    @property
+    def running_proccesses_number(self):
+        # TODO(eric): Is this supposed to be non-zombie procs? Or num threads?
+        return self.proccesses_number
 
     @property
     def processes_pid(self):
