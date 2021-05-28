@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """ pytop.py: Htop copycat implemented in Python. """
 
 __author__ = 'Andrii Oshtuk'
@@ -9,9 +7,8 @@ __version__ = '1.0.0'
 
 import urwid
 import argparse
-import sys
 
-from sysinfo import Cpu, MemInfo, Uptime, LoadAverage, ProcessesController, Utility
+from pytop.sysinfo import Cpu, MemInfo, Uptime, LoadAverage, ProcessesController, Utility
 
 
 def parse_args():
@@ -284,8 +281,7 @@ class Application:
         self.loop.widget = fill
 
 
-if __name__ == "__main__":
+def main():
     options = parse_args()
 
     Application().start()
-    sys.exit(0)
