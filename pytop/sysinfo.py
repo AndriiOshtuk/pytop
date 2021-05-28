@@ -297,6 +297,7 @@ class Process:
     _total_memory = None
 
     def __init__(self, pid):
+        assert isinstance(pid, int)
         self.pid = pid
         self.user = None
         self.priority = None
@@ -324,6 +325,9 @@ class Process:
             self._read_status()
         except (ValueError, IndexError):
             raise SystemInfoError('Error while parsing /proc/[pid]/ subdirectory')
+        except FileNotFoundError:
+            # TODO(eric.cousineau): Sometimes there's a race condition :(
+            pass
 
     def _read_cmdline(self):
         filename = f'{Process._proc_folder}/{self.pid}/cmdline'
@@ -336,32 +340,32 @@ class Process:
             values = ['Reserved']
             values += file.read().split()
 
-            if not self.command:
-                self.command = Process._remove_whitespaces(values[2][1:-1])
+        if not self.command:
+            self.command = Process._remove_whitespaces(values[2][1:-1])
 
-            self.kthread = True if int(values[9]) & 0x00200000 else False
-            self.priority = values[18]
-            self.niceness = values[19]
+        self.kthread = True if int(values[9]) & 0x00200000 else False
+        self.priority = values[18]
+        self.niceness = values[19]
 
-            time_ticks = sum(map(int, values[14:18]))
-            uptime = Process._uptime.uptime
+        time_ticks = sum(map(int, values[14:18]))
+        uptime = Process._uptime.uptime
 
-            if self._time_ticks_old is None:
-                self._time_ticks_old = time_ticks
-            if self._uptime_old is None:
-                self._uptime_old = uptime
-
-            seconds = uptime - self._uptime_old
-            if seconds <= 0:
-                self.cpu_usage = 0.0
-            else:
-                ticks_diff = time_ticks - self._time_ticks_old
-                self.cpu_usage = 100 * ((ticks_diff / self._clock_ticks_per_second) / seconds)
+        if self._time_ticks_old is None:
             self._time_ticks_old = time_ticks
+        if self._uptime_old is None:
             self._uptime_old = uptime
 
-            process_time_ticks = int(values[14]) + int(values[15])
-            self._time = process_time_ticks / self._clock_ticks_per_second
+        seconds = uptime - self._uptime_old
+        if seconds <= 0:
+            self.cpu_usage = 0.0
+        else:
+            ticks_diff = time_ticks - self._time_ticks_old
+            self.cpu_usage = 100 * ((ticks_diff / self._clock_ticks_per_second) / seconds)
+        self._time_ticks_old = time_ticks
+        self._uptime_old = uptime
+
+        process_time_ticks = int(values[14]) + int(values[15])
+        self._time = process_time_ticks / self._clock_ticks_per_second
 
     def _read_status(self):
         filename = f'{Process._proc_folder}/{self.pid}/status'
@@ -425,26 +429,32 @@ class ProcessesController:
 
     def __init__(self, uptime, memory):
         self._processes = set()
-        self._previous_procceses = set()
+        self._previous_pids = set()
         Process.set_uptime(uptime)
         Process.set_memory_info(memory)
         self.update()
 
-    def update(self):
-        actual_processes = {
-            pid for pid in os.listdir(ProcessesController._proc_folder)
-            if os.path.isdir(ProcessesController._proc_folder + pid) and pid.isdigit()
-        }
+    def _get_all_pids(self):
+        pids = set()
+        d = self._proc_folder
+        for name in os.listdir(d):
+            if os.path.isdir(os.path.join(d, name)) and name.isdigit():
+                pids.add(int(name))
+        return pids
 
-        obsolete = self._previous_procceses - actual_processes
-        new = actual_processes - self._previous_procceses
+    def update(self):
+        actual_pids = self._get_all_pids()
+        obsolete_pids = self._previous_pids - actual_pids
+        new_pids = actual_pids - self._previous_pids
+        self._previous_pids = actual_pids
 
         for process in self._processes:
-            if process.pid in obsolete:
+            if process.pid in obsolete_pids:
                 del process
-        for pid in new:
+        for pid in new_pids:
             self._processes.add(Process(pid))
-        self._previous_procceses = actual_processes
+        for process in self._processes:
+            process.update()
 
     @property
     def processes(self):

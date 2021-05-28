@@ -5,8 +5,9 @@ __copyright__ = '(C) 2019 ' + __author__
 __license__ = "MIT"
 __version__ = '1.0.0'
 
-import urwid
 import argparse
+
+import urwid
 
 from pytop.sysinfo import Cpu, MemInfo, Uptime, LoadAverage, ProcessesController, Utility
 
@@ -108,27 +109,50 @@ class RightPanel(urwid.WidgetWrap):
         self.widgets[2].set_text([('fields_names', u' Uptime:'), self.uptime.uptime_as_string])
 
 
+class ProcessEntry(urwid.Text):
+    # N.B. We use this weird inheritance to associate a process with a widget (Text). This way,
+    # we can use urwid's ModifiedList (via SimpleFocusListWalker) to facilitate real-time updates.
+    def __init__(self, pr, *args, **kwargs):
+        self.pr = pr
+        super().__init__(*args, **kwargs)
+
+
 class ProcessPanel(urwid.WidgetWrap):
     """docstring for ProcessPanel"""
     def __init__(self, controller):
         self.controller = controller
         self.header = urwid.Text(('table_header',u'  PID USER       PRI    NI VIRT   RES  SHR S  CPU%  MEM%      TIME+   Command'))
 
-        self.processes = []
-
-        for pr in self.controller.processes:
-            self.processes.append(urwid.Text(self.process_markup(pr)))
-
-        self.table_view = urwid.ListBox(urwid.SimpleFocusListWalker(self.processes))
+        self.entries = urwid.SimpleFocusListWalker([])
+        self.table_view = urwid.ListBox(self.entries)
         self.table_widget = urwid.Frame(self.table_view, header=self.header)
+
+        self.refresh()
 
         urwid.WidgetWrap.__init__(self, self.table_widget)
 
-    def refresh(self):
-        self.processes = []
+    def _entry_key(self, entry):
+        return -entry.pr.cpu_usage
 
+    def refresh(self):
+        # Register new processes.
+        prev_processes = [x.pr for x in self.entries]
         for pr in self.controller.processes:
-            self.processes.append(urwid.Text(self.process_markup(pr)))
+            if pr not in prev_processes:
+                self.entries.append(ProcessEntry(pr, ""))
+        # Remove old processes.
+        # Copy to admit mutation while iterating.
+        for entry in list(self.entries):
+            if entry.pr not in self.controller.processes:
+                self.entries.remove(entry)
+        # Sort processes.
+        # TODO(eric.cousineau): Let the index follow the sorting?
+        _, focus = self.entries.get_focus()
+        self.entries.sort(key=self._entry_key)
+        self.entries.set_focus(focus)
+        # Update entries.
+        for entry in self.entries:
+            entry.set_text(self.process_markup(entry.pr))
 
     def process_markup(self, pr):
         priority = 'RT' if pr.priority == '-100' else pr.priority
@@ -206,12 +230,12 @@ class Application:
         self.loop.set_alarm_in(self.refresh_rate_sec, self.refresh)
 
     def refresh(self, loop, data):
-        for i in self.refreshable_data:
-            i.update()
-
-        self.loop.set_alarm_in(self.refresh_rate_sec, self.refresh)
+        for data in self.refreshable_data:
+            data.update()
         self.left_panel.refresh()
         self.right_panel.refresh()
+        self.processes_list.refresh()
+        self.loop.set_alarm_in(self.refresh_rate_sec, self.refresh)
 
     def start(self):
         self.loop.run()
@@ -252,6 +276,8 @@ class Application:
                 raise urwid.ExitMainLoop()
             if key == 'f1':
                 self.display_help()
+            if key == 'f10':
+                self.handle_f10_buton(key)
             else:
                 self.loop.widget = self.main_widget
         elif type(key) == tuple:
