@@ -103,7 +103,7 @@ class RightPanel(urwid.WidgetWrap):
         urwid.WidgetWrap.__init__(self, self.panel)
 
     def refresh(self):
-        self.widgets[0].set_text([('fields_names', u' Tasks:'), f' {self.controller.proccesses_number}, 0 thr, 0 kthr; {self.controller.running_proccesses_number} running'])
+        self.widgets[0].set_text([('fields_names', u' Tasks:'), f' {self.controller.processes_number}, 0 thr, 0 kthr; {self.controller.running_processes_number} running'])
         self.widgets[1].set_text([('fields_names', u' Load average:'), self.load.load_average_as_string])
         self.widgets[2].set_text([('fields_names', u' Uptime:'), self.uptime.uptime_as_string])
 

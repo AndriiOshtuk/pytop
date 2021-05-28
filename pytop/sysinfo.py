@@ -451,13 +451,13 @@ class ProcessesController:
         return self._processes
 
     @property
-    def proccesses_number(self):
+    def processes_number(self):
         return len(self._processes)
 
     @property
-    def running_proccesses_number(self):
+    def running_processes_number(self):
         # TODO(eric): Is this supposed to be non-zombie procs? Or num threads?
-        return self.proccesses_number
+        return self.processes_number
 
     @property
     def processes_pid(self):
