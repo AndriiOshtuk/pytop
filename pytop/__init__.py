@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """ pytop.py: Htop copycat implemented in Python. """
 
 __author__ = 'Andrii Oshtuk'
@@ -9,18 +7,8 @@ __version__ = '1.0.0'
 
 import urwid
 import argparse
-import sys
 
-from sysinfo import Cpu, MemInfo, Uptime, LoadAverage, ProcessesController, Utility
-
-
-def parse_args():
-    """ Returns script options parsed from CLI arguments."""
-    argparser = argparse.ArgumentParser(prog='pytop')
-    argparser.add_argument('-v', '--version', action='version',
-                           version='%(prog)s ' + __version__ + ' - ' + __copyright__)
-
-    return argparser.parse_args()
+from pytop.sysinfo import Cpu, MemInfo, Uptime, LoadAverage, ProcessesController, Utility
 
 
 class CpuAndMemoryPanel(urwid.WidgetWrap):
@@ -115,7 +103,7 @@ class RightPanel(urwid.WidgetWrap):
         urwid.WidgetWrap.__init__(self, self.panel)
 
     def refresh(self):
-        self.widgets[0].set_text([('fields_names', u' Tasks:'), f' {self.controller.proccesses_number}, 0 thr, 0 kthr; {self.controller.running_proccesses_number} running'])
+        self.widgets[0].set_text([('fields_names', u' Tasks:'), f' {self.controller.processes_number}, 0 thr, 0 kthr; {self.controller.running_processes_number} running'])
         self.widgets[1].set_text([('fields_names', u' Load average:'), self.load.load_average_as_string])
         self.widgets[2].set_text([('fields_names', u' Uptime:'), self.uptime.uptime_as_string])
 
@@ -172,7 +160,14 @@ class Application:
         ('niceness', 'dark red', ''),
     ]
 
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        refresh_rate_sec,
+    ):
+        # options
+        self.refresh_rate_sec = refresh_rate_sec
+
         # initialize data sources
         self.cpu = Cpu()
         self.memory = MemInfo()
@@ -208,16 +203,15 @@ class Application:
                                     unhandled_input=self.handle_input
                                     )
 
-        self.loop.set_alarm_in(1, self.refresh)
+        self.loop.set_alarm_in(self.refresh_rate_sec, self.refresh)
 
     def refresh(self, loop, data):
         for i in self.refreshable_data:
             i.update()
 
-        self.loop.set_alarm_in(1, self.refresh)
+        self.loop.set_alarm_in(self.refresh_rate_sec, self.refresh)
         self.left_panel.refresh()
         self.right_panel.refresh()
-        # TODO(AOS) Update self.processes_list
 
     def start(self):
         self.loop.run()
@@ -284,8 +278,21 @@ class Application:
         self.loop.widget = fill
 
 
-if __name__ == "__main__":
-    options = parse_args()
+def main():
+    """ Returns script options parsed from CLI arguments."""
+    parser = argparse.ArgumentParser(prog='pytop')
+    parser.add_argument(
+        '-r', '--refresh_rate_sec', type=float, default=1.0,
+        help='Refresh rate (sec)',
+    )
+    parser.add_argument(
+        '-v', '--version', action='version',
+        version='%(prog)s ' + __version__ + ' - ' + __copyright__,
+    )
 
-    Application().start()
-    sys.exit(0)
+    args = parser.parse_args()
+
+    app = Application(
+        refresh_rate_sec=args.refresh_rate_sec,
+    )
+    app.start()
