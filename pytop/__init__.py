@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """ pytop.py: Htop copycat implemented in Python. """
 
 __author__ = 'Andrii Oshtuk'
@@ -7,20 +5,11 @@ __copyright__ = '(C) 2019 ' + __author__
 __license__ = "MIT"
 __version__ = '1.0.0'
 
-import urwid
 import argparse
-import sys
 
-from sysinfo import Cpu, MemInfo, Uptime, LoadAverage, ProcessesController, Utility
+import urwid
 
-
-def parse_args():
-    """ Returns script options parsed from CLI arguments."""
-    argparser = argparse.ArgumentParser(prog='pytop')
-    argparser.add_argument('-v', '--version', action='version',
-                           version='%(prog)s ' + __version__ + ' - ' + __copyright__)
-
-    return argparser.parse_args()
+from pytop.sysinfo import Cpu, MemInfo, Uptime, LoadAverage, ProcessesController, Utility
 
 
 class CpuAndMemoryPanel(urwid.WidgetWrap):
@@ -115,9 +104,17 @@ class RightPanel(urwid.WidgetWrap):
         urwid.WidgetWrap.__init__(self, self.panel)
 
     def refresh(self):
-        self.widgets[0].set_text([('fields_names', u' Tasks:'), f' {self.controller.proccesses_number}, 0 thr, 0 kthr; {self.controller.running_proccesses_number} running'])
+        self.widgets[0].set_text([('fields_names', u' Tasks:'), f' {self.controller.processes_number}, 0 thr, 0 kthr; {self.controller.running_processes_number} running'])
         self.widgets[1].set_text([('fields_names', u' Load average:'), self.load.load_average_as_string])
         self.widgets[2].set_text([('fields_names', u' Uptime:'), self.uptime.uptime_as_string])
+
+
+class ProcessEntry(urwid.Text):
+    # N.B. We use this weird inheritance to associate a process with a widget (Text). This way,
+    # we can use urwid's ModifiedList (via SimpleFocusListWalker) to facilitate real-time updates.
+    def __init__(self, pr, *args, **kwargs):
+        self.pr = pr
+        super().__init__(*args, **kwargs)
 
 
 class ProcessPanel(urwid.WidgetWrap):
@@ -126,21 +123,36 @@ class ProcessPanel(urwid.WidgetWrap):
         self.controller = controller
         self.header = urwid.Text(('table_header',u'  PID USER       PRI    NI VIRT   RES  SHR S  CPU%  MEM%      TIME+   Command'))
 
-        self.processes = []
-
-        for pr in self.controller.processes:
-            self.processes.append(urwid.Text(self.process_markup(pr)))
-
-        self.table_view = urwid.ListBox(urwid.SimpleFocusListWalker(self.processes))
+        self.entries = urwid.SimpleFocusListWalker([])
+        self.table_view = urwid.ListBox(self.entries)
         self.table_widget = urwid.Frame(self.table_view, header=self.header)
+
+        self.refresh()
 
         urwid.WidgetWrap.__init__(self, self.table_widget)
 
-    def refresh(self):
-        self.processes = []
+    def _entry_key(self, entry):
+        return -entry.pr.cpu_usage
 
+    def refresh(self):
+        # Register new processes.
+        prev_processes = [x.pr for x in self.entries]
         for pr in self.controller.processes:
-            self.processes.append(urwid.Text(self.process_markup(pr)))
+            if pr not in prev_processes:
+                self.entries.append(ProcessEntry(pr, ""))
+        # Remove old processes.
+        # Copy to admit mutation while iterating.
+        for entry in list(self.entries):
+            if entry.pr not in self.controller.processes:
+                self.entries.remove(entry)
+        # Sort processes.
+        # TODO(eric.cousineau): Let the index follow the sorting?
+        _, focus = self.entries.get_focus()
+        self.entries.sort(key=self._entry_key)
+        self.entries.set_focus(focus)
+        # Update entries.
+        for entry in self.entries:
+            entry.set_text(self.process_markup(entry.pr))
 
     def process_markup(self, pr):
         priority = 'RT' if pr.priority == '-100' else pr.priority
@@ -172,7 +184,14 @@ class Application:
         ('niceness', 'dark red', ''),
     ]
 
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        refresh_rate_sec,
+    ):
+        # options
+        self.refresh_rate_sec = refresh_rate_sec
+
         # initialize data sources
         self.cpu = Cpu()
         self.memory = MemInfo()
@@ -208,16 +227,15 @@ class Application:
                                     unhandled_input=self.handle_input
                                     )
 
-        self.loop.set_alarm_in(1, self.refresh)
+        self.loop.set_alarm_in(self.refresh_rate_sec, self.refresh)
 
     def refresh(self, loop, data):
-        for i in self.refreshable_data:
-            i.update()
-
-        self.loop.set_alarm_in(1, self.refresh)
+        for data in self.refreshable_data:
+            data.update()
         self.left_panel.refresh()
         self.right_panel.refresh()
-        # TODO(AOS) Update self.processes_list
+        self.processes_list.refresh()
+        self.loop.set_alarm_in(self.refresh_rate_sec, self.refresh)
 
     def start(self):
         self.loop.run()
@@ -258,6 +276,8 @@ class Application:
                 raise urwid.ExitMainLoop()
             if key == 'f1':
                 self.display_help()
+            if key == 'f10':
+                self.handle_f10_buton(key)
             else:
                 self.loop.widget = self.main_widget
         elif type(key) == tuple:
@@ -284,8 +304,21 @@ class Application:
         self.loop.widget = fill
 
 
-if __name__ == "__main__":
-    options = parse_args()
+def main():
+    """ Returns script options parsed from CLI arguments."""
+    parser = argparse.ArgumentParser(prog='pytop')
+    parser.add_argument(
+        '-r', '--refresh_rate_sec', type=float, default=1.0,
+        help='Refresh rate (sec)',
+    )
+    parser.add_argument(
+        '-v', '--version', action='version',
+        version='%(prog)s ' + __version__ + ' - ' + __copyright__,
+    )
 
-    Application().start()
-    sys.exit(0)
+    args = parser.parse_args()
+
+    app = Application(
+        refresh_rate_sec=args.refresh_rate_sec,
+    )
+    app.start()
